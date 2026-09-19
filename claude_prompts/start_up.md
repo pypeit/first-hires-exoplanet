@@ -146,3 +146,51 @@ What I learned:
   worth checking the `.gitignore` handles it during prompt #4.
 
 No git commands were run.
+
+### 2026-09-19 (Generated .claude/settings.json)
+
+Created `.claude/settings.json`, starting from IOPtics'
+(`/Users/xavier/Oceanography/python/IOPtics/.claude/settings.json`) and keeping
+the policy rather than the accumulated entries. Validated as JSON: 42 allow,
+7 deny, 1 ask; no remaining `ocean14` references.
+
+Kept unchanged: the read-only shell allow-list (`ls`, `cat`, `cd`, `pwd`,
+`echo`, `find`, `grep`, `rg`, `head`, `tail`, `wc`, `sort`, `which`, `env`), the
+benign file ops (`mkdir`, `touch`, `cp`, `mv`), read-only git (`status`, `diff`,
+`log`, `show`, `branch`), the python/pip/pytest/jupyter/conda entries, the full
+deny list (`sudo`, `rm -rf /`, `rm -rf ~`, and `git push`/`commit`/`reset`/
+`rebase`), and `ask` on `Bash(rm:*)`.
+
+Changed for this repo:
+- `conda run -n ocean14:*` → `conda run -n pypeit14:*`.
+- Dropped the six trailing path-specific entries: two Crossref `curl` one-offs
+  and their two matching `python3 -c` JSON-parsing incantations, two
+  hard-coded-interpreter `pytest` invocations (one of which still points at a
+  Linux `/home/xavier/miniconda3` path that does not exist on this machine), a
+  `python -c "import bing..."` probe, and a `grep` against an IOPtics report
+  file. All were session cruft, per the prompt doc.
+- Swapped the WebFetch publisher domains. IOPtics allows Optica, Wiley (ASLO),
+  and Taylor & Francis — ocean-optics journals, useless here. Substituted the
+  astronomy equivalents: ADS, arXiv, IOP Science, plus the Keck Observatory
+  Archive (KOA) and the PypeIt docs. Kept `doi.org`. This is a judgment call
+  beyond the literal instruction: I read "copy the policy" to mean literature
+  checking stays first-class, with the domains translated to this field.
+- Added `Bash(pypeit_setup:*)` and `Bash(run_pypeit:*)` — the two core PypeIt
+  CLI entry points this project will lean on. Also added `Bash(diff:*)`, which
+  I wanted during the skills task.
+
+What I learned:
+- IOPtics' allow-list is a good illustration of the accretion problem the
+  start-up notes warn about: roughly a sixth of its entries are one-off escaped
+  shell incantations that can never match again, and one references a machine
+  the user no longer works on. Worth re-pruning this file periodically rather
+  than only at creation.
+- `Bash(cd:*)` is in the inherited allow-list, but note that `cd` inside a
+  compound Bash command can still trigger a prompt; absolute paths are the safer
+  habit in this repo.
+- Still outstanding for prompt #4: there is no `.gitignore` yet, and
+  `.claude/settings.local.json` (machine-local, uncommitted) needs to be listed
+  in it. `.claude/settings.json` itself *should* be committed — it is the
+  committed policy.
+
+No git commands were run.
