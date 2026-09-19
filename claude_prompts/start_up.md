@@ -194,3 +194,65 @@ What I learned:
   committed policy.
 
 No git commands were run.
+
+### 2026-09-19 (Basic Python repo files)
+
+Surveyed the sibling repositories to learn the conventions before generating
+anything. In `Projects/PypeIt`: `the-holy-grail`, `MUSERePipe` and
+`shane-telescope`; cross-checked against `Oceanography/python`: `IOPtics`,
+`PAB`, `retrieve-or-bust`, `cugn-climatology`. The reliable core everywhere is
+a snake_case package dir + `setup.py` + `requirements.txt` + `README.md` +
+`LICENSE` + `.gitignore` + `CLAUDE.md` + `claude_prompts/`, with `pytest.ini`
+where tests are set up. Six of the seven use `setup.py`; only `shane-telescope`
+uses `pyproject.toml`. Followed the majority, and used `the-holy-grail`'s
+`setup.py` as the template — it is the closest analog (a new astronomy repo
+under `Projects/PypeIt`, itself modeled on IOPtics').
+
+Generated (README.md, LICENSE already existed):
+- `first_hires_exoplanet/__init__.py` and `first_hires_exoplanet/tests/__init__.py`
+  — empty package init files. Underscores because the repo name is hyphenated.
+- `setup.py` — the house `setup_keywords` dict form: name
+  `first_hires_exoplanet`, BSD, version `0.0.dev0`, `python_requires>=3.11`,
+  `find_packages()`, and the conditional `bin/` scripts block.
+- `requirements.txt` — numpy, scipy, matplotlib, astropy, pandas, tqdm,
+  IPython, pytest, plus `pypeit`, with a comment that the local checkout at
+  `/Users/xavier/Projects/PypeIt/PypeIt` should be installed with
+  `pip install -e .` rather than the PyPI release.
+- `pytest.ini` — `testpaths = first_hires_exoplanet/tests`, copying
+  cugn-climatology's.
+- `.gitignore` — copied the-holy-grail's 221-line standard Python template,
+  then appended `.claude/settings.local.json`, `data/`, `Science/`, `QA/` and
+  `*.fits`/`*.fits.gz`.
+- `README.md` — expanded the one-line stub to goal, install steps, layout and
+  authors, matching the-holy-grail's shape.
+
+Verified: `find_packages()` returns
+`['first_hires_exoplanet', 'first_hires_exoplanet.tests']`; `setup.py` parses
+and reports name/version; `import first_hires_exoplanet` succeeds in `pypeit14`;
+`pytest` collects 0 items cleanly; `git check-ignore` confirms
+`.claude/settings.local.json` and `*.fits` are ignored while
+`.claude/settings.json` stays tracked.
+
+What I learned:
+- **`pypeit14` has no `setuptools`.** `conda run -n pypeit14 python -c "import
+  setuptools"` fails; `base` has 82.0.1. Modern `pip install -e .` uses an
+  isolated build env so it should still work, but validation had to run under
+  `base`. Worth `conda install setuptools -n pypeit14` if anything needs it
+  directly.
+- PypeIt in that env is `2.0.2.dev891+gf8a757720`, i.e. the local dev checkout,
+  not a release — so reductions here track whatever is in
+  `/Users/xavier/Projects/PypeIt/PypeIt`. Pin a commit before quoting results.
+- **No sibling `.gitignore` excludes `.claude/settings.local.json`** — I added
+  it here, a deliberate deviation. `settings.json` is the committed policy;
+  `settings.local.json` is machine-local. Consider backporting to the siblings.
+- `shane-telescope/pyproject.toml` has a real bug: it declares
+  `[tool.setuptools.packages.find] where = ["src"]`, but the package lives at
+  `shane_telescope/` with no `src/` directory, so it packages nothing. Another
+  reason the `setup.py` form was the safer template. Not fixed — different repo.
+- You committed prompts #2 and #3 in the meantime (commits `2488137` and
+  `1653377`), so `.claude/` and `CLAUDE.md` are tracked. This task's files are
+  untracked and ready for you to stage, along with the new
+  `claude_prompts/context_prompts.md`.
+
+No git commands were run other than read-only `git log`, `git ls-files`,
+`git status` and `git check-ignore`.
