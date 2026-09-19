@@ -45,6 +45,9 @@ generate the report.  Use Opus 5.  Log your work.
 
 Use Opus 5.  Log your work.  
 
+7. Ok, we are going to proceed to work on the data.  I will branch off to 
+attack item 1.  Please generate a prompt doc named `data_phase1_prompt.md` in the `claude_prompts` directory.  Use Opus 5.  Log your work.  
+
 ## Q&A
 
 ### Q1. Which target do you mean by "the first HIRES exoplanet"?
@@ -877,3 +880,64 @@ see rather than the model behind them.
   works. Relevant to future scripts in the `astro` environment.
 
 No git commands were run.
+
+### 2026-09-19 (Wrote claude_prompts/data_phase1_prompt.md)
+
+Generated the phase-1 data prompt doc, following the shape of this file (Goals,
+Code, Prompts, Q&A, Logs) with two additions: a "What we already know" section
+carrying forward the facts established here, and a `### Report` section for the
+investigate-and-report prompts, per the house convention.
+
+Before writing it I checked the ground rather than framing the tasks from
+assumption, and **what I found reshapes the phase**:
+
+- **PypeIt already supports the pre-2004 HIRES detector — as of three weeks
+  ago.** `origin/develop` carries `KeckHIRESOrigSpectrograph`, spectrograph name
+  `keck_hires_orig`, `ndet = 1`, commented "Pre detector upgrade (~August 2004)
+  ... the original Tektronix CCD". Added by **Ryan Cooke** in `a7ce0fab6` and
+  `aed8b71b6` (1-2 Sep 2026), then `4e6bb723f` (very old RED97 cross-disperser)
+  and `b76bccacf` (hard-coded Tektronix bad-pixel mask). `develop`'s
+  `doc/spectrographs/keck_hires.rst` documents both eras and both classes.
+- **But none of it is in our checkout.** `Projects/PypeIt/PypeIt` is on branch
+  `hamspec`; `git merge-base --is-ancestor` reports all four commits absent from
+  HEAD. The `pypeit` installed in `pypeit14` (`2.0.2.dev891+gf8a757720`) comes
+  from that checkout, so it does not have `keck_hires_orig`. The first obstacle
+  in phase 1 is therefore an environment problem, not a data problem, and
+  prompts 1 and 2 address it before any data is touched.
+- Ryan Cooke is a collaborator — a co-author on `the-holy-grail` — so he is the
+  person to ask if the original-CCD support misbehaves. Noted in the doc.
+
+Had I not checked, the doc would have sent the next session off to implement
+pre-2004 support with the `new-spectrograph` skill — re-doing work a
+collaborator finished this month. This is the concrete payoff of reading the
+code before writing the plan.
+
+Also recorded in the doc, from earlier work: HIRES is still `supported = False`
+in PypeIt generally, so we are early adopters; the development suite has no
+HIRES `RAW_DATA`, so there is no worked example or regression test to lean on;
+and three risks to probe early — that the planet-search nights may carry few or
+no ThAr arcs because the programme used iodine as its wavelength fiducial, that
+every science frame is imprinted with the I2 forest between ~500 and 620 nm
+(which will complicate anything assuming a clean stellar spectrum), and that
+`pypeit14` lacks `setuptools`.
+
+The doc lists ten prompts: establish the right PypeIt (1-2), survey KOA and read
+`keck_hires_orig` without downloading or editing (3-4), pull one night of the
+1998 July run (5), `pypeit_setup` (6), `run_pypeit` with the dev-suite
+`diagnose-reduction` skill (7), inspect the extraction for the iodine forest and
+the wavelength solution (8), extend to the rest of the July run (9), and a
+closing assessment of what phase 2 would need (10). It also points at the
+dev-suite skills and asks that the exact PypeIt commit be recorded for any
+reduction whose results we quote, since the installed version is a development
+checkout and "PypeIt 2.0.2" is not reproducible on its own.
+
+**What I learned.**
+- `git log --all` plus `git merge-base --is-ancestor` is the quick way to answer
+  "does this capability exist, and do *we* have it" — the two halves had
+  different answers here.
+- Our local PypeIt checkout being on a feature branch (`hamspec`) means it is
+  not a reliable guide to what PypeIt can currently do. Worth checking against
+  `origin/develop` before concluding anything is unsupported.
+
+No git commands were run beyond read-only inspection of the PypeIt repository
+(`log`, `show`, `branch`, `merge-base`).
