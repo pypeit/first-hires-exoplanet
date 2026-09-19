@@ -229,3 +229,6 @@ Science/
 QA/
 *.fits
 *.fits.gz
+
+# ...but the package ships a small data file (see Q10 in claude_prompts/context_prompts.md)
+!first_hires_exoplanet/data/
