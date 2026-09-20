@@ -160,6 +160,143 @@ reproducible statement on its own.
 
 ## Report
 
+### Prompt 3 (2026-09-20): KOA survey of HIRES frames on HD 187123, 1997 Dec - 1998 Oct
+
+Metadata only; **no FITS files were downloaded**. Script:
+`first_hires_exoplanet/koa_survey.py`. Raw results:
+`first_hires_exoplanet/data/koa_hd187123_science.csv` (37 rows) and
+`koa_hd187123_nights_all.csv` (3124 rows -- every frame on the 21 nights).
+The script re-runs offline from those CSVs; `--refresh` re-queries KOA.
+
+**Query.** POST to `https://koa.ipac.caltech.edu/TAP/sync` with
+`REQUEST=doQuery, LANG=ADQL, FORMAT=csv, MAXREC=100000`:
+
+    SELECT <54 columns> FROM koa_hires
+     WHERE mjd >= 50783.0 AND mjd < 51118.0
+       AND (upper(targname) LIKE '%187123%' OR upper(object) LIKE '%187123%')
+     ORDER BY mjd
+
+then one query per UT night, `... WHERE koaid LIKE 'HI.YYYYMMDD.%'`, with the
+night list derived from the science `koaid` prefixes. Gotchas: the table is
+`koa_hires` (`koa.koa_hires` returns 403); filter on `mjd` (double), because
+`date_obs` is a char column and filtering it raises `ORA-01861`; it is `xdangl`,
+not `xdisangl`; `filename` is not a column (use `filehand` / `ofname`).
+
+**Public status: everything below is public.** KOA silently appends a
+proprietary-period clause to every query, so it only ever returns rows whose
+`propint` has elapsed. Our frames carry `propint` 115-202 months across semids
+`1997B_U07H` ... `1998B_U05H`; the longest (202 months from Dec 1997) expired in
+2014.
+
+**Census.** 37 `object` frames of HD 187123 on 21 UT nights. Exactly 30 match the
+30 catalogue epochs in `hd187123_hires_rv.tsv` (exposure midpoints agree to
+< 0.05 min): 1 + 1 + 10 + 4 + 7 + 7 -- **the document's epoch count is
+confirmed against the archive.** The 7 extra frames are 5 iodine-free
+(`iodin = F`) exposures -- 1997-12-24 (500 s), 1998-08-12 (60 s), and three
+consecutive 500 s frames on 1998-08-26, which look like a deliberate template
+set and matter for phase 3 -- plus 2 short Latham frames (1998-07-14, 1998-08-12).
+All 37 frames: `xdispers = RED`, `binning = '1,2'`, `fil1name = kv370`,
+`fil2name = clear`, 1 amplifier, `ccdgain = F`; decker B1 except 1998-09-17 (B2).
+
+#### The 1998 July 15-19 run
+
+Program `N14H`, PI G. Marcy, "True Jupiter Analogs: A Survey within 50 parsecs",
+semid `1998A_N14H`, `propint` 117. **Every night is shared with program `N01H`
+(T. Bida, Mercury), whose daytime frames (02:55-04:30 UT) are in an unrelated
+setup** -- decker B2, binning 1,1, filter bg24a, echangl +0.266, xdangl +1.32,
+2 amplifiers. Those are excluded below and should be excluded from any download.
+
+Counts verified directly against KOA (558 frames total across the five nights):
+
+| UT night | HD 187123 (UT, s) | echangl | xdangl | ThAr arcs, B1 | clean flats B2 2 s | I2 flats B1 3 s | bias |
+|---|---|---|---|---|---|---|---|
+| 07-15 | 1 (10:34, 260) | 0.0019450 | -0.5405 | **2** (07:29, 15:07) | 16 | 2 | 0 |
+| 07-16 | 1 (14:43, 400) | 0.0009302 | -0.5455 | **2** (07:39, 15:05) | 16 | 2 | 0 |
+| 07-17 | 2 (08:56, 300; 13:32, 400) | 0.0009302 | -0.5445..-0.5475 | **1** (15:06) | 16 | 1 | 0 |
+| 07-18 | 3 (08:07, 250; 10:44, 215; 13:44, 400) | 0.0008880 | -0.5495..-0.5525 | **1** (15:09) | 16 | 1 | 0 |
+| 07-19 | 3 (06:54, 427; 09:55, 300; 13:53, 427) | -0.0000423 | -0.5495..-0.5535 | **0** | **0** | **0** | 0 |
+
+**ThAr arcs exist, and this is the key result of the survey.** They are
+`koaimtyp = arclamp`, `lampname = ThAr1`, `lampcat1 = T` (hollow cathode),
+`lmirrin = T`, lamp filter ng3, 10 s, decker B1, binning 1,2, filter kv370 --
+i.e. *the science configuration*. Angle offsets from the same night's science
+frames are 0.0000 in echangl and <= 0.004 deg in xdangl, against PypeIt
+`np.isclose` tolerances of atol 0.01 and 0.1 respectively: a margin of more than
+20x. Caveat: each arc is 10 s and carries 365-1926 saturated pixels (`npixsat`),
+so the strongest ThAr lines are saturated.
+
+**July 19 has no calibrations of any kind** -- no arc, no flat, no bias. The
+Marcy program's last frame that night is the 13:53 UT science exposure. The
+nearest usable arc is `HI.19980718.54587` (15:09 UT on Jul 18): within tolerance
+on both angles, but taken ~15.8 h before the first July 19 science frame.
+
+**Flats come in two families, and neither is ideal.** The 16 clean quartz flats
+per night (`lampqtz2 = T`, lamp filter bg14, 2 s, `iodin = F`, unsaturated) use
+decker **B2** (7.0"), not the science **B1** (3.5"). The only B1 flats are the
+1-2 per night taken with the **iodine cell in the beam** (`iodin = T`, 3 s) --
+the planet-search "iodine flats", which carry the I2 forest. Since `decker` is
+one of PypeIt's `configuration_keys`, `pypeit_setup` will put the clean flats in
+a *different* configuration from the science frames.
+
+**Hatch open on nearly all flats.** 62 of the 70 July flats have `hatopen = T`;
+only the 8 B2 flats at 15:08-15:20 UT on 07-16 have `hatopen = F`. PypeIt's
+HIRES `idname` rule types a frame as an internal flat only when the hatch is
+closed, so most flats may come back untyped from the automatic pass. Prompt 4
+should confirm against the code and prompt 6 against real headers.
+
+**No biases or darks on any of the five nights.** The nearest same-configuration
+ones are on 1998-07-14 (10 biases at 0 s, plus 39 darks of 60-180 s) and
+1998-08-12. PypeIt keys bias/dark only on `dispname` and `binning`
+(`config_independent_frames`), so the July 14 biases are the natural candidates.
+
+**Angles will not split the run.** echangl is constant to 8 decimals within each
+night and spans 0.0020 deg across the five nights; xdangl drifts up to 0.004 deg
+within a night and 0.013 deg across the run. Both are comfortably inside PypeIt's
+tolerances, so the five nights form one configuration on angle grounds. What
+*will* split configurations is `decker` (B1 science vs. B2 flats).
+
+**Binning is uniform** at `'1,2'` with `window = '0,0,0,2048,1024'` for every
+frame in the science configuration, so the second value bins the FITS row axis.
+Whether that axis is spatial or spectral is *inconsistent inside PypeIt* for this
+class -- see risk 7.
+
+**Iodine.** All 10 July science frames have `iodin = T`. No iodine-free
+HD 187123 frame exists in the July run; the candidate templates are the three
+500 s frames on 1998-08-26.
+
+#### Other runs (summary)
+
+1997-12-23/24 (U07H): 1 science frame each, with 2 matching B1 arcs and 2
+matching B1 flats per night, no biases. PypeIt will type these as `RED97`
+(`mjd < 50814`), i.e. a separate configuration. 1998-06-18 (N12H): 1 matching
+arc, 2 matching flats. 1998-08-17..26 (U05H): 1-2 matching arcs and 1-3 matching
+flats per night, with biases/darks present. 1998-09-12..18: 1 matching arc per
+night except 09-17, which has none (and whose science frame is B2).
+
+#### Risks carried into prompts 5-9
+
+1. **July 19 has no calibrations at all** and needs a cross-night assignment from
+   July 18 in the `.pypeit` file.
+2. **Clean flats are B2, science is B1**; `decker` is a configuration key, so
+   expect to hand-assign flats or drop `decker` from the configuration keys.
+3. **The only B1 flats have the iodine cell in the beam** -- do not let PypeIt
+   use them as pixel flats without thought.
+4. **62 of 70 flats have `hatopen = T`**, which may leave them untyped.
+5. **No biases on the run nights**; the 1998-07-14 set is the fallback.
+6. **Arcs are 10 s with hundreds of saturated pixels**, and there are only 1-2
+   per night.
+7. **The BINNING axis convention is internally inconsistent** for
+   `keck_hires_orig`: `get_detector_par` sets `specaxis = 1`, while the inherited
+   `compound_meta('binning')` does `binspatial, binspec = parse_binning(...)`, a
+   convention written for the post-2004 mosaic. This feeds
+   `wavelengths.fwhm = 8.0/bin_spec` and `order_spat_range`. A real 2048x1024
+   frame settles it (prompt 5). Related: `config_specific_par` scales
+   `order_spat_range` by 6200 px, a mosaic-sized number, on a 2048 px chip.
+8. **Each July night is shared with Bida's program** (N01H) and with 68-111
+   frames of other planet-search targets in the *same* configuration. A download
+   must be filtered to HD 187123 plus its calibrations, or `pypeit_setup` will be
+   swamped.
+
 ## Logs
 
 ### 2026-09-19 (Prompt 1: confirmed PypeIt `develop` is ready for the original HIRES detector)
@@ -337,3 +474,80 @@ standard library plus `pypeit` only.
 **No PypeIt source file was edited and no git command changed state.** Changes
 in this repo: the new `first_hires_exoplanet/check_env.py`, and this document
 (the "Resolved" note updated with the new version string, plus this entry).
+
+### 2026-09-20 (Prompt 3: surveyed KOA for the 1997-98 HD 187123 frames and their calibrations)
+
+**Task.** Survey the Keck Observatory Archive for HIRES observations of
+HD 187123 between 1997 December and 1998 October and for the calibrations taken
+on those nights; report frame types, counts, binning, angles, deckers, exposure
+times and public status; establish whether ThAr arcs exist for the 1998 July
+15-19 run; download nothing. Delegated to a Fable subagent as the prompt asked.
+The findings are written into the `## Report` section above. **No FITS files
+were downloaded.**
+
+**Headline results.**
+
+- **ThAr arcs DO exist for the July run, in the science configuration** -- on
+  four of the five nights. This was the biggest open risk in "Risks worth probing
+  early" ("Calibrations may be thin ... If PypeIt needs arcs that were never
+  taken, that shapes the whole phase"), and it has landed the good way.
+- **July 19 is the exception: no arc, no flat, no bias.** It will need the
+  July 18 arc, assigned across nights by hand.
+- **The flats are awkward.** The clean quartz flats are decker B2 while the
+  science is B1, and the only B1 flats have the iodine cell in the beam.
+- **The archive confirms the document's own epoch count**: exactly 30 of the 37
+  HD 187123 frames match the 30 catalogue epochs to better than 0.05 min.
+
+I verified the phase-defining claims independently of the subagent, with a
+direct query over all 558 frames on the five July nights: the per-night arc
+counts (2, 2, 1, 1, 0), the ThAr1/B1/10 s configuration, the 16-per-night B2
+`iodin = F` flats against the 1-2 B1 `iodin = T` flats, the near-universal
+`hatopen = T`, and the absence of biases all reproduce exactly.
+
+**New files (untracked -- staging is yours).**
+
+- `first_hires_exoplanet/koa_survey.py` -- the survey, re-runnable, in `figs.py`
+  house style. Runs **offline** from the saved CSVs by default and only touches
+  the network with `--refresh`, so the committed CSVs are the reproducible
+  record of what the archive said today.
+- `first_hires_exoplanet/data/koa_hd187123_science.csv` (37 rows, 15 KB)
+- `first_hires_exoplanet/data/koa_hd187123_nights_all.csv` (3124 rows, **1.25 MB**,
+  54 columns) -- this is by far the largest file in the repository. It is
+  committable, but you may want to trim columns first; flagging it rather than
+  deciding for you.
+
+**What I learned about the repository / archive.**
+
+1. *The KOA TAP service is directly usable from `pypeit14` with nothing but
+   `requests`* -- no `pykoa`, `astroquery` or `pyvo` needed, none of which are
+   installed. The recipe is recorded in the Report section so we never have to
+   rediscover it. Four traps cost real time: the table is `koa_hires` and not
+   `koa.koa_hires`; `date_obs` is a *char* column and filtering on it raises
+   `ORA-01861`, so filter on `mjd`; the column is `xdangl`, not `xdisangl`; and
+   `filename` does not exist (`filehand` / `ofname` do).
+2. *Public status is answered by the service's own behaviour, not by a column.*
+   KOA appends a proprietary-period clause to every query, so anything returned
+   is already public. That is a cleaner answer than reading `propint` and doing
+   the arithmetic, and it is worth remembering for any future archive question.
+3. *`.gitignore` already anticipates this.* The top-level `data/` exclusion is
+   explicitly negated by `!first_hires_exoplanet/data/` (line 234), so metadata
+   files placed there are tracked normally while raw frames stay out. The
+   existing `hd187123_hires_rv.tsv` set that precedent.
+4. *Nights are shared between programs, heavily.* Each July night carries
+   T. Bida's Mercury program in a completely different instrument setup, plus
+   68-111 frames of other planet-search targets in the *same* configuration as
+   ours. Prompt 5 must filter the download rather than pulling whole nights, or
+   `pypeit_setup` will be handed hundreds of irrelevant frames.
+5. *KOA's `imtype` column does not mean what its description says* for these
+   1998 headers -- it holds the amplifier mode (`ONEAMP` / `TWOAMPTOP`).
+   `obstype` and `ccdspeed` are empty and `xdname` is `undefined`. Use
+   `koaimtyp` plus the lamp columns for frame typing. The boolean columns
+   (`iodin`, `hatopen`, `lampcat1`, ...) are `'T'`/`'F'` strings.
+6. *The survey surfaced three things in the PypeIt source for prompt 4 to chase*,
+   all recorded as risks in the Report: the `not HATOPEN` requirement for flat
+   typing, the binning-axis inconsistency between `specaxis = 1` and the
+   inherited `compound_meta('binning')`, and `config_specific_par` scaling
+   `order_spat_range` by a mosaic-sized 6200 px on a 2048 px chip.
+
+**No FITS data was downloaded, no PypeIt source was edited, and no git command
+changed state.**
