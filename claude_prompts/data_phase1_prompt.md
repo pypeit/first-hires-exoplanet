@@ -48,10 +48,10 @@ stale before relying on it.
   at `f3a1f1d27` (merge of PR #2197, `keck_hires_tektronix`), clean and in sync
   with `origin/develop`, and all four commits above are ancestors of HEAD. The
   install is editable and maps to this checkout, so `keck_hires_orig` loads and
-  runs. The only residue is a stale `pypeit.__version__`
-  (`2.0.2.dev891+gf8a757720`, 325 commits behind HEAD) — cosmetic for running,
-  but it is the string PypeIt stamps into outputs, so it must be refreshed
-  before we quote any reduction. Ryan Cooke is a collaborator (he is a co-author
+  runs. The stale `pypeit.__version__` noted in prompt 1 has since been
+  refreshed (prompt 2): it now reads **`2.0.2.dev1216+gf3a1f1d27`**, which
+  embeds HEAD. **That is the version/commit string to quote for any reduction we
+  publish.** Ryan Cooke is a collaborator (he is a co-author
   on `the-holy-grail`) and is the person to ask if the original-CCD support
   behaves oddly.
 - **HIRES is still `supported = False`** in PypeIt generally. We are early
@@ -107,7 +107,7 @@ reproducible statement on its own.
 
 2. Read this file. Carry out the recommendation from prompt 1 and verify that
    `keck_hires_orig` is importable and appears in `pypeit_show_spectrographs` (or
-   the equivalent). Record the commit hash. Use Opus 5. Log your work.
+   the equivalent). Record the commit hash. Use Fable if you can. Log your work.
 
 3. Read this file. Survey the Keck Observatory Archive
    (`koa.ipac.caltech.edu`) for HIRES observations of HD 187123 between 1997
@@ -116,45 +116,45 @@ reproducible statement on its own.
    cross-disperser and echelle angles, deckers, exposure times, and whether
    everything is public. Pay particular attention to whether ThAr arcs exist for
    the 1998 July 15-19 run. Write this into the Report section. **Do not
-   download anything yet.** Use Opus 5. Log your work.
+   download anything yet.** Use Fable if you can. Log your work.
 
 4. Read this file. Read `keck_hires_orig` in the PypeIt source and report what it
    expects: the header cards used by `init_meta`, the configuration keys, the
    detector parameters, the frame-typing rules, the required calibrations, and
    the default `PypeItPar`. Compare that against what prompt 3 found in the
-   archive, and list every gap. **Do no editing.** Use Opus 5. Log your work.
+   archive, and list every gap. **Do no editing.** Use Fable if you can. Log your work.
 
 5. Read this file. Download one night from the 1998 July 15-19 run, with its
    calibrations, into a directory outside the repository (the raw frames must
    not be committed; `.gitignore` excludes a top-level `data/`). Report what
-   arrived and confirm the headers match what prompt 4 expected. Use Opus 5. Log
+   arrived and confirm the headers match what prompt 4 expected. Use Fable if you can. Log
    your work.
 
 6. Read this file. Run `pypeit_setup` on that night. Report the configurations
    it identifies, the frame types it assigns, and any frame it fails to type or
    assigns wrongly. Do not hand-edit the `.pypeit` file yet — first report what
-   the automatic pass produced. Use Opus 5. Log your work.
+   the automatic pass produced. Use Fable if you can. Log your work.
 
 7. Read this file. Reduce that night with `run_pypeit`. If it fails, use the
    `diagnose-reduction` skill to work out why, fix what can be fixed in the
    input file or parameters, and report anything that looks like a genuine
-   PypeIt bug rather than a configuration mistake. Use Opus 5. Log your work.
+   PypeIt bug rather than a configuration mistake. Use Fable if you can. Log your work.
 
 8. Read this file. Inspect the reduction. Check the order tracing, the flat
    field, and the wavelength solution against the QA products, and look at the
    extracted 1D spectrum: are the iodine lines present between roughly 500 and
    620 nm, are the stellar lines where they should be for a G2V star, and what
    signal-to-noise did we get? Write a figure-generating script to disk, as with
-   the public document. Use Opus 5. Log your work.
+   the public document. Use Fable if you can. Log your work.
 
 9. Read this file. Reduce the remaining nights of the 1998 July run the same
    way, and report whether the reduction is stable from night to night. Use
-   Opus 5. Log your work.
+   Fable if you can. Log your work.
 
 10. Read this file. Write a short assessment of phase 1: whether the reduction is
     sound and how we know, what PypeIt handled well, what needed intervention,
     anything worth reporting upstream, and what phase 2 would require. Use
-    Opus 5. Log your work.
+    Fable if you can. Log your work.
 
 ## Q&A
 
@@ -250,3 +250,90 @@ Evidence:
 **Nothing was edited in the PypeIt source, and no git state was changed.** The
 only edits were to this document: the stale checkout/branch note and the
 `setuptools` risk bullet.
+
+### 2026-09-19 (Prompt 2: refreshed the install, verified `keck_hires_orig`, recorded the commit)
+
+**Task.** Carry out prompt 1's recommendation, verify `keck_hires_orig` is
+importable and appears in the spectrograph listing, and record the commit hash.
+Delegated to a Fable subagent as the prompt asked; re-verified here.
+
+**The commit to quote.** Every reduction we publish from this environment should
+be cited as:
+
+> PypeIt `2.0.2.dev1216+gf3a1f1d27` -- branch `develop`, commit
+> `f3a1f1d274b15ee1358f167819d77f1948fce1bd`
+> ("Merge pull request #2197 from pypeit/keck_hires_tektronix", 2026-09-14),
+> editable install from `/Users/xavier/Projects/PypeIt/PypeIt`.
+
+**Version metadata: fixed and confirmed.** The recommended
+`conda run -n pypeit14 pip install -e . --no-deps` was run in the PypeIt
+checkout. It succeeded, rebuilt the editable wheel, and rewrote the gitignored
+`pypeit/pkg/version.py` to `__version__ = '2.0.2.dev1216+gf3a1f1d27'` -- HEAD's
+short sha, with no `.dirty` suffix. The install is still editable and still
+resolves to the checkout, and the tracked tree stayed clean. Network was needed
+(build isolation fetches `setuptools`, absent from the env) and was available.
+
+One honest wrinkle: by the time the subagent took its "before" reading, the
+version was *already* `...+gf3a1f1d27`. The prompt-1 measurement of
+`2.0.2.dev891+gf8a757720` was real, and `version.py` was regenerated between the
+two tasks -- so the fix had landed before this task re-applied it. The reinstall
+is idempotent, so re-running it changed nothing and confirmed the state. The net
+effect is what matters: the version now matches HEAD, verified.
+
+**Verification.** `keck_hires_orig` is importable and listed:
+
+- `conda run -n pypeit14 python -m first_hires_exoplanet.check_env` -- all checks
+  pass, exit 0 (see below).
+- CLI: `conda run -n pypeit14 pypeit_setup -h | grep keck_hires_orig` prints
+  `keck_deimos, keck_esi, keck_hires, keck_hires_orig,` in the
+  `-s/--spectrograph` choices. 87 spectrographs are registered.
+- Runtime: `load_spectrograph('keck_hires_orig')` gives `ndet = 1`,
+  `supported = False`, `configuration_keys()` =
+  `['dispname', 'decker', 'filter1', 'echangle', 'xdangle', 'binning']`,
+  `get_detector_par(1)` -> platescale 0.216, ronoise [2.8], saturation 65535,
+  and `default_pypeit_par()['rdx']['detnum']` -> `[1]`.
+
+**New file: `first_hires_exoplanet/check_env.py`.** Rather than leave this
+verification as a one-off, it is now a committable, re-runnable script, run from
+the repo root with:
+
+    conda run -n pypeit14 python -m first_hires_exoplanet.check_env
+
+It prints the PypeIt version and import path, infers the checkout from
+`pypeit.__file__`, reports HEAD sha / branch / commit subject / tree
+cleanliness, checks that the version string actually embeds HEAD (warning loudly
+and exiting 1 if not, which is precisely the trap we fell into), and confirms
+`keck_hires_orig` loads and builds its detector and default parameters. It exits
+non-zero on any failure, so it can gate a reduction. Style follows `figs.py`;
+standard library plus `pypeit` only.
+
+**What I learned about the repository / environment.**
+
+1. *The stale-version trap is a standing hazard, not a one-off.* Because
+   `pypeit/pkg/version.py` is written by `setuptools_scm` **at install time** and
+   is gitignored, every future branch switch in the PypeIt checkout will silently
+   desynchronise `pypeit.__version__` from the code actually running. Since that
+   string is stamped into PypeIt output headers, a reduction can be mislabelled
+   with no visible symptom. `check_env.py` exists to catch this; **run it before
+   any reduction whose results we quote** (prompts 7, 8, 9).
+2. *There is no spectrograph-listing script in PypeIt at all.* Re-confirmed:
+   `pypeit_show_spectrographs` (named in this document's prompt 2) does not
+   exist, and the only `pypeit_show_*` entry points are `show_arxiv`,
+   `show_wvcalib`, `show_1dspec`, `show_2dspec`, `show_pixflat`. The spectrograph
+   list surfaces *only* as the `-s/--spectrograph` choices text in
+   `pypeit_setup`, `pypeit_obslog`, `pypeit_chk_for_calibs`, `pypeit_ql`,
+   `run_pypeit`, `pypeit_trace_edges`, `pypeit_cache_github_data` and
+   `pypeit_view_fits`, all of which import `available_spectrographs` from
+   `pypeit.spectrographs.util`. The canonical check is the runtime import or
+   `pypeit_setup -h`.
+3. *`pip show pypeit` dumps the entire BSD licence text into its `License:`
+   field.* Harmless, but it makes that command a poor way to eyeball the version;
+   `python -c "import pypeit; print(pypeit.__version__)"` is the clean one.
+4. *The repo now has a second module alongside `figs.py`.* `check_env.py` is the
+   first non-figure code in `first_hires_exoplanet/`, and it runs as
+   `python -m first_hires_exoplanet.check_env` because `__init__.py` already
+   exists. It is untracked (`??`) -- staging and committing is yours.
+
+**No PypeIt source file was edited and no git command changed state.** Changes
+in this repo: the new `first_hires_exoplanet/check_env.py`, and this document
+(the "Resolved" note updated with the new version string, plus this entry).
