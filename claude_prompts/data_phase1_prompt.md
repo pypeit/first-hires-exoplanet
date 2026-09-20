@@ -130,28 +130,31 @@ reproducible statement on its own.
    arrived and confirm the headers match what prompt 4 expected. Use Fable if you can. Log
    your work.
 
-6. Read this file. Run `pypeit_setup` on that night. Report the configurations
+6. I have put `PypeIt` on a new branch called `orig-hires-fixes`.  Please fix the 
+   issues you have identified in prompt 4 and 5.  I will then push the branch to the remote repository. Use Fable if you can. Log your work.
+
+7. Read this file. Run `pypeit_setup` on that night. Report the configurations
    it identifies, the frame types it assigns, and any frame it fails to type or
    assigns wrongly. Do not hand-edit the `.pypeit` file yet — first report what
    the automatic pass produced. Use Fable if you can. Log your work.
 
-7. Read this file. Reduce that night with `run_pypeit`. If it fails, use the
+8. Read this file. Reduce that night with `run_pypeit`. If it fails, use the
    `diagnose-reduction` skill to work out why, fix what can be fixed in the
    input file or parameters, and report anything that looks like a genuine
    PypeIt bug rather than a configuration mistake. Use Fable if you can. Log your work.
 
-8. Read this file. Inspect the reduction. Check the order tracing, the flat
+9. Read this file. Inspect the reduction. Check the order tracing, the flat
    field, and the wavelength solution against the QA products, and look at the
    extracted 1D spectrum: are the iodine lines present between roughly 500 and
    620 nm, are the stellar lines where they should be for a G2V star, and what
    signal-to-noise did we get? Write a figure-generating script to disk, as with
    the public document. Use Fable if you can. Log your work.
 
-9. Read this file. Reduce the remaining nights of the 1998 July run the same
+10. Read this file. Reduce the remaining nights of the 1998 July run the same
    way, and report whether the reduction is stable from night to night. Use
    Fable if you can. Log your work.
 
-10. Read this file. Write a short assessment of phase 1: whether the reduction is
+11. Read this file. Write a short assessment of phase 1: whether the reduction is
     sound and how we know, what PypeIt handled well, what needed intervention,
     anything worth reporting upstream, and what phase 2 would require. Use
     Fable if you can. Log your work.
@@ -465,6 +468,145 @@ orig angle file covers `RED` with our echangle/xdangle inside its range.
     `PypeItError` without `raise` (a no-op); `config_independent_frames`'
     docstring claims a `DATE-OBS` rule the code does not implement; `spectrim`,
     `PRELINE` and `POSTLINE` are read but unused in the Orig reader.
+
+### Prompt 5 (2026-09-20): downloaded 1998-07-16 (+ 1998-07-14 flats) and checked the headers
+
+**31 frames, 152.8 MB, all verified**, outside the repository in
+`/Users/xavier/Projects/PypeIt/first-hires-exoplanet-data/raw/`. No FITS file is
+inside the git repo (`find ... -name '*.fits'` returns 0). Download script:
+`first_hires_exoplanet/koa_download.py`, idempotent and refusing any output root
+under the repo.
+
+**Night chosen: 1998-07-16**, because it is the only night of the July 15-19 run
+with *hatch-closed* flats (8 B2 quartz frames at 15:08-15:20 UT), which PypeIt
+types automatically, and it has two ThAr arcs bracketing the night. The four
+clean B1 flats and two B1 arcs from 1998-07-14 identified in prompt 4 were
+downloaded alongside.
+
+**Retrieval recipe.** Query KOA for the `filehand` column (it is *not* in the
+saved survey CSVs), then
+`GET https://koa.ipac.caltech.edu/cgi-bin/getKOA/nph-getKOA?filehand=<filehand>`,
+which returns `Content-Type: image/x-fits`, 4,743,360 B per 1-amp frame. A wrong
+`filehand` silently returns an HTML error page with **status 200**, so every
+download must be verified (content type, size, `SIMPLE`, FITS-openable). Note
+`astropy.io.fits` refuses `memmap=True` on these files ("BZERO/BSCALE/BLANK
+header keywords present") — use `memmap=False`.
+
+#### Manifest
+
+`raw/1998jul16/` (21 files, each 4,743,360 B, raw shape (1024, 2303)):
+
+| koaid | role | UT | elap | decker | hatch | iodin |
+|---|---|---|---|---|---|---|
+| HI.19980716.52985 | **science** (HD 187123) | 14:43:05 | 400 | B1 | open | T |
+| HI.19980716.27559 | ThAr arc | 07:39:19 | 10 | B1 | **open** | F |
+| HI.19980716.54321 | ThAr arc | 15:05:21 | 10 | B1 | closed | F |
+| .26537 .26659 .26754 .26850 .26945 .27041 .27137 .27233 | quartz flat | 07:22-07:34 | 2 | B2 | open | F |
+| .54482 .54599 .54696 .54791 .54887 .54982 .55079 .55175 | quartz flat | 15:08-15:20 | 2 | B2 | **closed** | F |
+| HI.19980716.27384, .54172 | iodine flat | 07:36, 15:03 | 3 | B1 | open | T |
+
+`raw/1998jul14/` (9 files): the 4 clean B1 `Narrowflat` frames
+(`.07711 .07810 .07910` at 02:08-02:12, `.55408` at 15:23), 2 hatch-closed B1
+ThAr arcs (`.07383`, `.55506`), and 3 zero-second biases (`.55653 .55747 .55840`).
+
+`raw/inspect_only/` holds the 07-16 `bias_lamp_on` frame, which turned out to be
+Bida's 2-amplifier N01H frame; it is kept out of the reduction directories so
+`pypeit_setup` never sees it, but it proved decisive (below).
+
+#### Prompt 4's open header questions, answered
+
+**Gap 10 (header logicals) — PASS.** They are genuine FITS booleans, not strings:
+on the science frame `HATOPEN = True`, `AUTOSHUT = True`, `XCOVOPEN = True`,
+`RCCVOPEN = True`, `LAMPCAT1 = False`, `LAMPQTZ2 = False`, `CCDGAIN = False`,
+each `<class 'bool'>`. So the typing logic and the gain lookup behave as written,
+and gain 1.9 e-/ADU is selected without error.
+
+**Gap 11 (`MJD`) — PASS with a nuance.** `MJD = '51010.613267'` exists but as a
+**string**; PypeIt casts it, and `get_meta_value('mjd')` returns a float.
+`UTC` is **absent** (the card is `UT`), and `DATE-OBS = '1998-07-16'` is
+date-only. The `DATE-OBS + UTC` fallback would raise `KeyError('UTC')` if it were
+ever reached — it is not, because `MJD` is present. Anything keyed on `dateobs`
+rather than `mjd` will see midnight.
+
+**Gap 9 (`PREPIX`) — the card exists, but it exposed a genuine PypeIt bug.**
+`PREPIX = 21`, `PRECOL = 21`, `POSTPIX = 234`, `NUMAMPS = 1`,
+`WINDOW = '0,0,0,2048,1024'`, `NAXIS1 = 2303`, `NAXIS2 = 1024`. The arithmetic
+prompt 4 predicted does **not** hold:
+
+    2*PREPIX + 2048 + POSTPIX = 2324   != NAXIS1 = 2303
+      PREPIX + 2048 + POSTPIX = 2303   == NAXIS1
+
+Column medians of a hatch-closed flat confirm the real layout: columns 0-20 sit
+at bias level (~778), column 21 jumps to 3533 and stays illuminated through
+column 2068, and column 2069 drops back to bias (~784). **Data = columns
+21:2069.** But `get_rawimage` (keck_hires.py:1050-1055) computes
+`col0 = prepix * 2`, and at runtime returns `datasec cols 42..2089`,
+`oscansec cols 2090..2302`. So **the data section is offset by exactly 21
+columns**: it discards the 21 bluest real columns and includes 21 columns of
+overscan at the other end of every order.
+
+The 2-amplifier Bida frame explains the mistake: there,
+`NAXIS1 = 2558 = 2*21 + 2048 + 2*234`, and `prepix * 2` is correct. **The code
+should read `prepix * namp`, not `prepix * 2`** — a one-line upstream fix, and
+one that only shows up on single-amplifier original-HIRES data. Verified
+independently at runtime, not inferred.
+
+**Gap 8 (binning axis) — settled empirically. `specaxis = 1` is correct.**
+The raw array is (1024, 2303): axis 0 is 1024 rows (binned x2), axis 1 is 2048
+chip columns plus pre/overscan (unbinned). Collapsing a B2 flat along columns
+gives **25 peaks along the row axis**, median spacing 29.5 px, with 39% of the
+profile dark between them — the echelle order stack. Collapsing along rows gives
+a smooth blaze with no gaps. An arc shows 49 emission peaks along one order's
+row. So **dispersion runs along NAXIS1 (2048, unbinned) and the x2-binned axis
+is spatial**: physically binspec = 1, binspat = 2, while PypeIt reports
+`binning = '2,1'`. Prompt 4's inversion is confirmed on real data.
+
+#### PypeIt over the real files — everything ran
+
+- `get_rawimage(science, 1)`: succeeds. Image (1024, 2303) float64, gain `[1.9]`,
+  ronoise `[2.8]`, `binning '2,1'`, `specaxis 1`, `platescale 0.216`.
+- `get_detector_par(1, hdu)`: gain `[1.9]`, `numamplifiers 1`.
+- `bpm(science, 1)`: shape (2048, 1024), 0.67% masked.
+- `check_spectrograph(science)`: does not raise.
+- **Frame typing matches prompt 4's predictions 30/30.** Science -> `Object`;
+  both arcs -> `Line` (*including the hatch-open 07:39 one*, confirming on real
+  data that the hatch is not tested for arcs); hatch-closed B2 flats and the
+  07-14 clean B1 flats -> `IntFlat`; hatch-open B2 flats and the iodine flats ->
+  `None`; 07-14 biases -> `None` (covers closed).
+
+#### Two further findings
+
+**The hard-coded MAKEE bad-pixel mask does not land on the bad columns.** The
+real bad columns are visible in the raw frames at 0-indexed NAXIS1 columns
+106-107, 1148 and 2027-2028 — i.e. MAKEE's 1-indexed coordinates count *raw*
+columns, including the 21 prescan columns. PypeIt applies them in the *trimmed*
+frame, so the masked columns land roughly 41 px away with the current reader, and
+would still be ~20 px off even after the `prepix * namp` fix. The 2027-2028 pair
+is a strong hot pair (median 1078 vs 807 ADU in the 400 s science frame), so
+watch for a spurious feature there in prompt 8.
+
+**Gain and read noise disagree with the headers.** `DETECTOR = 'Tek 2048E LRIS
+Eng grade device'`, with `CCDGN01 = 4.8` and `CCDRN01 = 6.0`, while PypeIt
+hard-codes 1.9 e-/ADU and 2.8 e-. These KOA DQA cards may be generic rather than
+measured for 1998, so this is **a question for Ryan Cooke, not a bug claim** —
+but it is worth asking before we quote a signal-to-noise in prompt 8.
+
+#### Carried into prompts 6-7
+
+1. The 400 s science frame is `Object` but fails `exprng = [601, None]`, so it
+   will be untyped — hand-type it (prompt 4 gap 1).
+2. Configurations will split on `decker`: B1 (science, arcs, iodine flats, 07-14
+   clean flats) vs B2 (the 07-16 quartz flats). The 07-14 angles are inside
+   tolerance of 07-16, so the 07-14 B1 frames should merge into the B1
+   configuration — verify in prompt 6.
+3. 13 of the 30 reduction frames arrive untyped (8 hatch-open flats, 2 iodine
+   flats, 3 biases). Expected.
+4. **The 21-column reader offset will affect every processed frame.** A 21 px
+   shift should be tolerable for flat-fielding and for the composite-arc
+   cross-correlation, but the dead strip may trigger low-count masking at the
+   order ends and slightly shrink the usable wavelength range. The fix is
+   upstream, not in the `.pypeit` file.
+5. The bad columns are effectively unmasked.
 
 ## Logs
 
@@ -790,3 +932,179 @@ picks.**
 
 **No PypeIt source was edited, no files were created, and no git command changed
 state.** The only change is this document.
+
+### 2026-09-20 (Prompt 5: downloaded 1998-07-16 and settled every open header question)
+
+**Task.** Download one night of the 1998 July run with its calibrations, outside
+the repository, report what arrived, and confirm the headers match prompt 4's
+expectations. Delegated to a Fable subagent; the load-bearing findings were
+re-verified here directly against the downloaded FITS files. Details are in the
+`## Report` section.
+
+**What arrived.** 31 frames, 152.8 MB, in
+`/Users/xavier/Projects/PypeIt/first-hires-exoplanet-data/raw/` — outside the
+repo, confirmed by `find`. I chose **1998-07-16** because it is the only night of
+the run with hatch-closed flats (which PypeIt types automatically) and it has two
+ThAr arcs bracketing the night; the four clean B1 flats from 1998-07-14 came
+too, per prompt 4's finding.
+
+**Prompt 4's three undecidable questions are now decided.**
+
+- *Header logicals are genuine FITS booleans* (`<class 'bool'>`), so the typing
+  logic and the `CCDGAIN` lookup work as written. **Gap 10 PASS** — the worst
+  case (science frames mistyping as arcs) does not happen.
+- *`MJD` exists* (as a string, which PypeIt casts). **Gap 11 PASS.** Worth
+  knowing: `UTC` is absent and `DATE-OBS` is date-only, so the documented
+  fallback would in fact raise — it is simply never reached.
+- *`PREPIX` exists*, so no `KeyError`. **But checking it turned up a real
+  PypeIt bug** — see below.
+
+**The main result: a genuine upstream bug in the original-CCD raw reader.**
+`NAXIS1 = 2303 = PREPIX + 2048 + POSTPIX`, not `2*PREPIX + ...`, and the column
+medians show the data occupying columns 21:2069. But `get_rawimage`
+(keck_hires.py:1050-1055) computes `col0 = prepix * 2`, and at runtime hands back
+`datasec cols 42..2089`. **Every frame's data section is offset by exactly 21
+columns**, dropping 21 real columns at one end of each order and including 21
+overscan columns at the other. The two-amplifier frame explains the slip:
+`prepix * 2` is right for `NUMAMPS = 2` and wrong for `NUMAMPS = 1`, so the code
+should say `prepix * namp`. This only bites single-amplifier original-HIRES data,
+which is exactly our case and is presumably why it survived. I verified the
+arithmetic, the column medians and the runtime `datasec` myself rather than
+taking the subagent's word.
+
+**What I learned about the data and the repository.**
+
+1. *`specaxis = 1` is correct, and the binning inversion is confirmed on real
+   data.* Collapsing a B2 flat along columns gives 25 order peaks along the row
+   axis at 29.5 px spacing; collapsing along rows gives a smooth blaze. So
+   dispersion runs along the unbinned 2048-column axis and the x2-binned row axis
+   is spatial — physically binspec 1, binspat 2, while PypeIt reports `'2,1'`.
+   Prompt 3's risk 7 is now fully resolved: half void, half a confirmed
+   upstream naming bug with limited consequences.
+2. *Frame typing matched prompt 4's predictions 30 out of 30.* The simulation
+   against KOA metadata was reliable. The one detail worth recording: the 07:39
+   UT arc has the hatch **open** and still types `Line`, confirming on a real file
+   that the hatch is not tested for arcs.
+3. *The hard-coded MAKEE bad-pixel mask misses the bad columns.* The real bad
+   columns sit at raw NAXIS1 106-107, 1148, 2027-2028 — MAKEE's coordinates count
+   raw columns *including* the 21 prescan columns, but PypeIt applies them to the
+   trimmed frame. They land ~41 px off now, and would still be ~20 px off after
+   the reader fix. 2027-2028 is a strong hot pair, so prompt 8 should look for a
+   spurious feature there.
+4. *Gain and read noise are worth querying.* The header says
+   `DETECTOR = 'Tek 2048E LRIS Eng grade device'`, `CCDGN01 = 4.8`,
+   `CCDRN01 = 6.0`; PypeIt hard-codes 1.9 e-/ADU and 2.8 e-. The KOA DQA cards
+   may be generic rather than measured for 1998, so this is a **question for Ryan
+   Cooke**, not a bug claim — but it must be settled before we quote a
+   signal-to-noise.
+5. *KOA retrieval traps.* `filehand` is the only retrieval key and is **not** in
+   the survey CSVs, so it must be re-queried. A wrong `filehand` returns an HTML
+   error page with **HTTP 200**, so downloads must be content-verified rather
+   than status-checked. And `astropy.io.fits` refuses `memmap=True` on these
+   files because of the `BZERO`/`BSCALE` cards.
+
+**Three items now stand for an upstream report to Ryan Cooke**: the
+`prepix * 2` reader offset (concrete, one line), the BPM column origin, and the
+binning-string inversion — plus the gain/read-noise question.
+
+**New file (untracked):** `first_hires_exoplanet/koa_download.py`. No raw data
+is in the repository, no PypeIt source was edited, and no git command changed
+state.
+
+### 2026-09-20 (Prompt 6: fixed the `keck_hires_orig` bugs on PypeIt branch `orig-hires-fixes`)
+
+**Task.** Fix the issues identified in prompts 4 and 5, on the new PypeIt branch
+`orig-hires-fixes`. Delegated to a Fable subagent; I reviewed the complete diff
+and re-ran every verification myself. **One file changed**,
+`pypeit/spectrographs/keck_hires.py` (+131/-33). No git command changed state --
+the work is in the working tree for you to commit and push.
+
+**Six fixes, all verified against the real 1998 frames.**
+
+1. **`get_rawimage` prescan offset** (the most important). `col0 = prepix * 2`
+   is correct only for `NUMAMPS = 2`; our 1-amp frames have
+   `NAXIS1 = PREPIX + 2048 + POSTPIX`. Changed to `prepix * namp` in both the
+   data and overscan expressions. Verified: the science frame now gives
+   `data 21..2068 (n=2048)` and `oscan 2069..2302 (n=234)` instead of
+   `42..2089` / `2090..2302`. Note the overscan was previously **truncated to
+   213 columns** because it ran off the array -- that is fixed too. The
+   2-amplifier frame is byte-for-byte unchanged (`data 42..1065`,
+   `oscan 2090..2323`).
+2. **BPM column origin.** I measured the real bad columns on the science frame:
+   raw 0-indexed NAXIS1 columns **106, 107, 1148, 2027, 2028**, which are
+   exactly MAKEE's numbers read as raw 0-indexed columns. Since the trimmed
+   frame starts at raw column `PREPIX`, the correct mapping is
+   `trimmed = C - PREPIX`, not `C - 1`. `bpm` now reads `PREPIX` from the
+   example file and applies that origin, falling back to the old behaviour with
+   a warning when no file is available. Verified: the fully-masked spectral
+   columns are now **[85, 86, 1127, 2006, 2007]**, precisely the measured bad
+   columns minus 21; previously they were [105, 106, 1147, 2026, 2027], masking
+   clean pixels while leaving the real defects exposed. The subagent's
+   end-to-end check through `RawImage.process` found the newly masked pixels
+   carry +515, +171, +40 and +15 e- of excess while the old positions showed
+   exactly 0.0 -- good confirmation.
+3. **Binning inversion, Orig class only.** Added a
+   `KeckHIRESOrigSpectrograph.compound_meta` that overrides **`binning` alone**
+   and delegates everything else to the base class, so header `'1,2'` now yields
+   PypeIt `'1,2'` (binspec 1, binspat 2) rather than the inverted `'2,1'`. The
+   paired change in `bpm` (`xbin, ybin = binspec, binspat`) went in with it --
+   that pairing was the risky part, since the old BPM was correct *only* because
+   it inverted the buggy string a second time. Verified both: binning `'1,2'`
+   and the ink spot still at rows 518-565. `order_platescale` now returns the
+   physically correct **0.432**"/binned spatial pixel instead of 0.216.
+4. **Missing `raise`** in `check_spectrograph` (L567): post-2004 data handed to
+   `keck_hires_orig` silently passed. Now raises. Our 1998 frames still pass.
+5. **Science exposure floor**, Orig class only: `[601, None]` -> `[1, None]`.
+   **This is the one policy choice rather than a bug fix, so flagging it.** The
+   reasoning is sound and I checked it: the floor is not what separates science
+   from calibrations -- `check_frame_type` requires `idname == 'Object'`, and
+   every calibration has a different `idname`, so no exposure range can turn a
+   2 s flat into a science frame. The only overlap is with `standard`, which
+   additionally requires an archive-standard positional match (HD 187123 returns
+   `False`). Verified over all 30 frames: the 400 s science frame now types as
+   **`science`**, and every other frame types exactly as before. If you would
+   rather this stayed a `.pypeit`-file setting, revert that one hunk -- nothing
+   else depends on it.
+6. **Docstrings**: the `config_independent_frames` claim about a `DATE-OBS` rule
+   (which the code does not implement) corrected; the `bpm` binning convention
+   and column origin documented; `get_rawimage` given a real docstring noting
+   `spectrim`, `PRELINE` and `POSTLINE` are unused.
+
+**Deliberately not changed: gain and read noise.** The headers carry
+`CCDGN01 = 4.8` and `CCDRN01 = 6.0` against PypeIt's hard-coded 1.9 e-/ADU and
+2.8 e-. That is an open **question** for Ryan Cooke, not a diagnosed bug, and
+changing it unilaterally would silently rescale every count we later quote.
+
+**Regression checks.** The post-2004 `keck_hires` class is untouched: it still
+builds with `ndet = 3`, its `compound_meta('binning')` still inverts as before,
+and its resolved parameter tree is byte-identical (5331 lines). The
+2-amplifier frame reads identically. `pytest test_spectrographs.py
+test_inputfiles.py test_trace.py` gives **51 passed**. No existing test
+exercises `keck_hires_orig` at all, which is worth remembering.
+
+**What I learned.**
+
+1. *The two riskiest fixes were coupled, and only correct together.* The BPM was
+   right by accident: `xbin, ybin = binspat, binspec` inverted the buggy binning
+   string a second time. Fixing `compound_meta` without flipping that line would
+   have silently transposed the mask -- a failure with no traceback and no
+   obvious symptom. Worth remembering that a "harmless naming artefact" can have
+   a compensating bug downstream holding it up.
+2. *Fixing the reader changed the BPM's ground truth.* Fix 2 only makes sense
+   *after* fix 1, because the trimmed frame's origin moves from raw column 42 to
+   raw column 21. The two had to be reasoned about as a pair, not independently.
+3. *MAKEE's mask coordinates are raw, prescan-inclusive, and effectively
+   0-indexed* relative to the numbers in `MaskHIRES_1x1.dat` -- established by
+   measuring the real defects rather than by reading the file's documentation.
+   The hot-corner entry at column 2059 is corroborating evidence: it is off the
+   end of a 2048-column trimmed detector under the old reading, but sits on real
+   excess flux under the new one.
+4. *`first_hires_exoplanet/verify_orig_fixes.py`* is the new re-runnable driver
+   that produced these numbers; run it before and after any future change to
+   this class and diff the output.
+
+**New file (untracked):** `first_hires_exoplanet/verify_orig_fixes.py`. The
+PypeIt working tree holds the six fixes on `orig-hires-fixes`, uncommitted, for
+you to review and push. **Four items remain for an upstream conversation with
+Ryan Cooke**: the four code bugs above (as a PR), the science-floor policy
+choice, and the gain/read-noise question.
