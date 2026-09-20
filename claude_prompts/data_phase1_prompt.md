@@ -608,6 +608,117 @@ but it is worth asking before we quote a signal-to-noise in prompt 8.
    upstream, not in the `.pypeit` file.
 5. The bad columns are effectively unmasked.
 
+### Prompt 7 (2026-09-20): what `pypeit_setup` produced automatically
+
+Run with PypeIt `2.0.2.dev1217+g017bece06` (branch `orig-hires-fixes`, commit
+`017bece06`, i.e. **including the prompt-6 fixes**). **No `.pypeit` file was
+hand-edited and no parameter overrides were passed** — everything below is the
+honest automatic result. All products are outside the repository, under
+`first-hires-exoplanet-data/redux/`.
+
+**Invocation.** `-r/--root` accepts multiple paths, so no symlink tree was
+needed. One quirk worth recording: `pypeit_setup` writes **either** the
+per-configuration `.pypeit`/`.calib` files (with `-c`) **or**
+`setup_files/*.sorted`/`.obslog` (without `-c`), never both, so each run needs
+two passes:
+
+    pypeit_setup -s keck_hires_orig -r <raw...> -c all -d <outdir>   # .pypeit files
+    pypeit_setup -s keck_hires_orig -r <raw...>       -d <outdir>   # .sorted/.obslog
+
+Both runs exited 0 with `Found 2 unique configuration(s).` and
+`PypeIt file successfully vetted.` The only warnings were a benign
+`No parameters necessary for median overscan method` and the expected
+`Couldn't identify the following files:` list.
+
+#### Run A — the night alone (21 frames)
+
+Two configurations, split on `decker` alone:
+
+| Setup | dispname | decker | filter1 | echangle | xdangle | binning |
+|---|---|---|---|---|---|---|
+| A | RED | **B2** | kv370 | 0.00093024 | -0.54400003 | 1,2 |
+| B | RED | **B1** | kv370 | 0.00093024 | -0.54400003 | 1,2 |
+
+Setup B (the science setup) contains the science frame and the two B1 ThAr arcs
+— and **nothing else**. Its `.calib` lists only `arc`, `tilt` and `science` for
+calibration group 1: **no `trace`, no `pixelflat`, no `illumflat`.** Setup A
+holds the 8 hatch-closed B2 flats as `pixelflat,illumflat,trace` (and the 8
+hatch-open ones commented out), but has no science frame.
+
+**So the night on its own cannot be reduced**, and `pypeit_setup` does not warn
+about it: `inputfiles.vet` checks file syntax, not calibration completeness, and
+still reported "successfully vetted". `run_pypeit` on this file would fail at
+order tracing. That is the single most important result of this prompt.
+
+#### Run B — the night plus the 1998-07-14 calibrations (30 frames)
+
+| Setup | dispname | decker | filter1 | echangle | xdangle | binning |
+|---|---|---|---|---|---|---|
+| **A** | RED | **B1** | kv370 | 0.00114165 | -0.542 | 1,2 |
+| B | RED | B2 | kv370 | 0.00093024 | -0.54400003 | 1,2 |
+
+(The setup letters swap relative to Run A, and Setup A's recorded angles are
+those of the *first frame encountered* — the 07-14 arc — not the science
+frame's. Informational only; matching is by tolerance.)
+
+**The prediction from prompts 4 and 5 holds: the 1998-07-14 clean B1 flats and
+arcs land in the same configuration as the 07-16 science frame.** The angle
+differences are |dechangle| = 2.1e-4 and |dxdangle| = 0.0035, far inside the
+`atol` of 0.01 and 0.1. Setup A's data block, as generated:
+
+    # HI.19980714.55653/.55747/.55840  None                       Bias        (3 biases)
+    # HI.19980716.27384/.54172         None                       iodine      (2 iodine flats)
+      HI.19980714.07383/.55506         arc,tilt                   Th-Ar
+      HI.19980716.27559/.54321         arc,tilt                   Th-Ar
+      HI.19980714.07711/.07810/.07910/.55408
+                                       pixelflat,illumflat,trace  Narrowflat
+      HI.19980716.52985                science                    Star+Iodine
+
+Calibration group 0 is **complete**: 4 arcs (both nights), 4 flats serving
+`pixelflat`/`illumflat`/`trace`, and the science frame. **Nothing needs
+hand-typing for this to run.**
+
+A physical check confirmed the cross-night merge is safe: cross-correlating the
+spatial order profile between 07-14 and 07-16 frames gives shifts of 0 to -1
+binned spatial pixels (the two 07-16 iodine flats, 7.5 h apart, differ by -1 px
+themselves), and the arc dispersion shift between nights is 0 px.
+
+#### Frame typing: 17 typed, 13 untyped, 0 mis-typed
+
+| frames | why untyped | verdict |
+|---|---|---|
+| 8 hatch-open B2 flats (2 s) | `idname` flat branch requires `not HATOPEN` (keck_hires.py:290-293); with the hatch open the frame falls off the end of every branch -> `None` | correctly left alone; B2 is not the science slit |
+| 2 B1 iodine flats (3 s) | identical mechanism | hand-typeable as `trace` only if wanted; **not needed**, the 07-14 flats supply it |
+| 3 biases (0 s) | `collcoveropen` is False (covers shut), so the Bias/Dark branch at L283-286 is unreachable | correctly left alone; `use_biasimage = False`, biases are not required |
+
+**No frame is mis-typed.** Every automatic assignment matches prompt 4's
+simulation and prompt 5's 30/30 verification.
+
+#### The prompt-6 fixes in a real pipeline run
+
+- **Fix 5 (science `exprng`) works**: `HI.19980716.52985` (400 s) is typed
+  `science` — and *only* `science`, since the archive-standard positional test
+  returns False, so `vet_assigned_ftypes` had nothing to arbitrate. Before the
+  fix this frame would have been commented out.
+- **Fix 3 (binning) works**: the `binning` column reads `1,2` for all 30 frames,
+  and participates in configuration matching without incident.
+- Fixes 1, 2, 4 and 6 are not exercised by `pypeit_setup`, which reads only
+  headers. They come into play in prompt 8.
+
+**No new bugs were introduced by the prompt-6 fixes.** Two PypeIt-wide
+observations worth banking: the `-c`/no-`-c` either/or described above, and the
+fact that `vet` will pass a `.pypeit` file whose science calibration group has no
+flats at all.
+
+#### What prompt 8 should use
+
+`redux/setup_jul16_jul14/keck_hires_orig_A/keck_hires_orig_A.pypeit`, copied into
+a fresh reduction directory so the automatic result stays on disk untouched.
+**No hand-typing is required.** Optional edits only: set `target` to `HD187123`
+for sane output basenames; optionally drop the two 07-14 arcs if single-night
+arcs are preferred (the pixel check says stacking is harmless). Do **not**
+reduce Setup B — it has flats but no science.
+
 ## Logs
 
 ### 2026-09-19 (Prompt 1: confirmed PypeIt `develop` is ready for the original HIRES detector)
@@ -1108,3 +1219,61 @@ PypeIt working tree holds the six fixes on `orig-hires-fixes`, uncommitted, for
 you to review and push. **Four items remain for an upstream conversation with
 Ryan Cooke**: the four code bugs above (as a PR), the science-floor policy
 choice, and the gain/read-noise question.
+
+### 2026-09-20 (Prompt 7: ran `pypeit_setup`, reported the automatic pass)
+
+**Task.** Run `pypeit_setup` on the 1998-07-16 night and report the
+configurations, the frame types, and anything untyped or mistyped — without
+hand-editing the `.pypeit` file. Delegated to a Fable subagent; I inspected the
+generated `.pypeit`, `.calib` and `.sorted` files directly. Full findings are in
+the `## Report` section. No `.pypeit` file was edited and no overrides were
+passed.
+
+**The headline: the night on its own cannot be reduced.** `pypeit_setup` splits
+1998-07-16 into two configurations on `decker`, and the B1 setup that holds the
+science frame and the arcs has **no `trace`, `pixelflat` or `illumflat` frame at
+all** — the only flats that night are the B2 ones (different decker, hence a
+different configuration) and the hatch-open/iodine ones (untyped). Adding the
+four 1998-07-14 clean B1 flats fixes it completely: they merge into the science
+configuration, and calibration group 0 then has arcs, tilts, all three flat
+roles and the science frame. **Prompt 8 needs no hand-typing at all**, which is a
+better position than prompts 3-5 suggested we would be in.
+
+**The prompt-6 fixes hold up in a real pipeline run.** The 400 s science frame is
+now typed `science` (fix 5) — and only `science`, since the archive-standard
+lookup returns False — and the `binning` column reads `1,2` throughout (fix 3).
+17 of 30 frames typed, 13 untyped, **0 mistyped**, matching prompt 4's
+prediction exactly. No new bugs.
+
+**What I learned about the repository / PypeIt.**
+
+1. *`check_env.py` earned its keep on its first real outing.* Switching PypeIt to
+   `orig-hires-fixes` left `pypeit.__version__` stale at `f3a1f1d27`, and the
+   script caught it before any reduction product was written. I refreshed the
+   install, and every file generated in this prompt is stamped
+   `2.0.2.dev1217+g017bece06`. **This needs doing after every branch move** —
+   the trap recurs exactly as predicted in the prompt-2 log.
+2. *`pypeit_setup` writes either `.pypeit` files or `.sorted`, never both.* With
+   `-c` you get the per-configuration `.pypeit`/`.calib`; without it you get
+   `setup_files/*.sorted`/`.obslog`. Getting both means running it twice. Easy to
+   trip over, and `run_setup.py` now encodes it.
+3. *`vet` does not check calibration completeness.* Run A's science `.pypeit`
+   file has no flats whatsoever and still reported "PypeIt file successfully
+   vetted". A vetted file is not a reducible one — worth remembering in prompt 8,
+   where a failure could otherwise look mysterious.
+4. *Setup letters are not stable.* B1 is Setup B in Run A and Setup A in Run B;
+   the angles recorded in the `.sorted` header are those of the first frame
+   encountered, not the science frame. Never refer to a setup by letter across
+   runs.
+5. *The cross-night merge is physically sound, not just within tolerance.*
+   Cross-correlating order profiles between 07-14 and 07-16 gives 0 to -1 binned
+   spatial pixels of shift — the same as between two 07-16 flats taken 7.5 h
+   apart — and 0 px in dispersion. So borrowing the 07-14 flats is not merely
+   permitted by `configuration_keys`, it is justified by the data.
+
+**New file (untracked):** `first_hires_exoplanet/run_setup.py`, which encodes the
+two-pass invocation, refuses to write inside the repository, and reproduces both
+runs (verified byte-identical apart from the UTC stamp). Two small diagnostic
+scripts live in the data tree at `redux/checks/`; bring them into the repo if you
+want them committed. No data artefact of any kind is inside the repository, and
+no git command changed state.
