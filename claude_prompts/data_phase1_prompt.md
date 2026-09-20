@@ -297,6 +297,175 @@ night except 09-17, which has none (and whose science frame is B2).
    must be filtered to HD 187123 plus its calibrations, or `pypeit_setup` will be
    swamped.
 
+### Prompt 4 (2026-09-20): what `keck_hires_orig` expects, and every gap against the archive
+
+Source read at `develop` `f3a1f1d274b15ee1358f167819d77f1948fce1bd`,
+`pypeit/spectrographs/keck_hires.py`. **Nothing was edited.** Frame-typing
+predictions below were *simulated* by replaying `compound_meta` and
+`check_frame_type` over the real KOA rows in `koa_hd187123_nights_all.csv`, not
+guessed.
+
+**Inheritance, settled at runtime.** `KeckHIRESOrigSpectrograph` inherits from
+`KECKHIRESBaseSpectrograph`, **not** from the post-2004 `KECKHIRESSpectrograph`.
+MRO: `['KeckHIRESOrigSpectrograph', 'KECKHIRESBaseSpectrograph', 'Spectrograph',
+'object']`. So `config_specific_par` resolves to the generic `Spectrograph` one,
+and the mosaic machinery (`get_mosaic_par`, `hires_read_1chip`, `indexing`) is
+never reached.
+
+#### Header cards `init_meta` uses
+
+Base `init_meta` L188-218, Orig override L937-947. Key entries: `ra`/`dec` from
+`RA`/`DEC` (the only ones `required` for science/standard); **`target` from
+`OBJECT`** (Orig L947 overriding the base `TARGNAME`); `decker` from `DECKNAME`;
+`exptime` from `ELAPTIME`; `dateobs` from `DATE-OBS`; `hatch` from `HATOPEN`;
+`filter1` from `FIL1NAME`; `echangle` from `ECHANGL` (rtol 1e-3, atol 1e-2);
+`xdangle` from `XDANGL` (rtol 1e-2, atol 1e-1); `frameno` from `FRAMENO`;
+`instrument` from `INSTRUME`. Compound: `binning`, `mjd`, `dispname`, `idname`,
+`lampstat01`. `raw_header_cards()` = `['FIL1NAME','ECHANGL','XDANGL']`.
+
+The commented-out `idname`/`IMAGETYP` line at L945 is dead: **`idname` is derived
+entirely from the lamp/cover/hatch/shutter logicals** at L259-297, not from a
+card.
+
+#### Frame typing — the decisive logic
+
+`idname` (L275-297, non-RED97 branch), paraphrasing the actual code:
+
+    collcoveropen = (dispname=='RED' and RCCVOPEN) or (dispname=='UV' and BCCVOPEN)
+    if XCOVOPEN and collcoveropen and no LAMPCAT1/2 and no LAMPQTZ2 and LAMPNAME!='quartz1':
+        if HATOPEN and AUTOSHUT:      -> 'Object'
+        elif not HATOPEN:             -> 'Bias' if ELAPTIME < 0.001 else 'Dark'
+    elif XCOVOPEN and collcoveropen and AUTOSHUT and (LAMPCAT1 or LAMPCAT2):
+                                      -> 'Line'
+    elif collcoveropen and AUTOSHUT and (LAMPQTZ2 or LAMPNAME=='quartz1') and not HATOPEN:
+                                      -> 'slitlessFlat' if not XCOVOPEN else 'IntFlat'
+    (otherwise falls off the end -> None)
+
+`check_frame_type` (L367-414) then maps `Object`->science/standard,
+`Line`->arc+tilt, `IntFlat`->pixelflat+illumflat+trace, `Bias`->bias,
+`Dark`->dark, each gated by an exposure range.
+
+**The hatch question from prompt 3 is answered: `not HATOPEN` is mandatory for
+every flat ftype, and is NOT tested for arcs.**
+
+Simulated typing of the real July 15-19 rows:
+
+| frame class | `idname` | automatic frametype |
+|---|---|---|
+| HD 187123 science, 215-427 s | `Object` | **NONE** (see the exposure-range gap) |
+| ThAr1 B1 10 s arcs | `Line` | `arc,tilt` |
+| B2 2 s quartz flats, hatch open (56 of 64) | `None` | **NONE** |
+| B2 2 s quartz flats, hatch closed (8, on 07-16) | `IntFlat` | `pixelflat,illumflat,trace` (B2 setup) |
+| B1 3 s iodine flats (all hatch open) | `None` | **NONE** |
+| D5 focus frames (ThAr) | `Line` | `arc,tilt` (own D5 setup) |
+| Bida's N01H frames (83) | `None` | **NONE** (`RCCVOPEN=F`) |
+| 1998-07-14 biases/darks | `None` | **NONE** (covers closed) |
+
+#### Detector parameters (Orig `get_detector_par`, L968-1012)
+
+`dataext=0`, `specaxis=1`, `specflip=False`, `spatflip=False`,
+`platescale=0.216` "/unbinned pix, `darkcurr=0.0`, `saturation=65535`,
+`nonlinear=0.7`, `mincounts=-1e10`, `numamplifiers=1`, `ronoise=[2.8]`.
+**`gain` is header-dependent**: `CCDGAIN == False` -> 1.9 e-/ADU, `== True` ->
+0.78, anything else -> `PypeItError("Bad CCDGAIN mode for HIRES")`. Our frames
+have `ccdgain = F`. `datasec`/`oscansec` are `None` here and supplied per-file by
+`get_rawimage`. `nonlinear_counts` works out to ~87,200 e-, which is what
+wavecalib uses to reject saturated arc lines.
+
+#### Default `PypeItPar` and required calibrations
+
+Orig `default_pypeit_par` (L950-966) adds only `rdx.detnum = [1]` and
+`wavelengths.ech_separate_2d = False` on top of the base. Resolved at runtime:
+
+- `wavelengths`: `method = echelle`, `lamps = ['ThAr']` (matching our ThAr1
+  arcs), `fwhm = 4.0` with `fwhm_fromlines = True`, `ech_2dfit = True`,
+  `sigdetect = 5`, `rms_thresh_frac_fwhm = 0.1`, `refframe = heliocentric`.
+- `use_biasimage = False` and `use_darkimage = False` for every frame type;
+  `use_overscan = True` (median); science/standard have `use_pixelflat = True`
+  and `use_illumflat = True`; `raise_chk_error = True`.
+- **Therefore the mandatory calibrations per group are `arc`, `tilt`, `trace`,
+  `pixelflat` and `illumflat`. Bias and dark are NOT required.**
+- `slitedges`: `order_spat_range = None`, which resolves to `[0, nspat]` =
+  `[0, 1024]` for our chip — the correct chip-sized value.
+
+#### `get_echelle_angle_files` — not a blocker
+
+Returns `keck_hires_orig_angle_fits.fits` and `keck_hires_composite_arc.fits`.
+**Both are present on disk** in `pypeit/data/arc_lines/reid_arxiv/` (25,920 B and
+15,577,920 B) and git-tracked. No `pypeit_cache_github_data` download needed. The
+orig angle file covers `RED` with our echangle/xdangle inside its range.
+
+#### Updated gap list
+
+1. **`scienceframe.exprng = [601, None]` vs. our 215-427 s science frames** —
+   **the single most certain blocker for the automatic pass.** All 10 HD 187123
+   frames fail the exposure floor and come out untyped, so `pypeit_setup` will
+   comment them out. Remedy: set `frametype = science` for the 10 frames in the
+   `.pypeit` data block (`run_pypeit` honours the user column and does not
+   re-apply `exprng`), optionally with `[scienceframe] exprng = 100, None` for
+   the record. The 601 s floor is a post-2004 faint-target assumption that does
+   not fit bright planet-search stars — worth reporting upstream.
+2. **Flats need the hatch closed; 62 of 70 July flats have it open** — hand-type
+   in the `.pypeit` file. Confirms risk 4.
+3. **No clean B1 flat in the July 15-19 run — but 1998-07-14 has four.**
+   `HI.19980714.07711`, `.07810`, `.07910` (02:08-02:11 UT) and `.55408`
+   (15:23 UT) are 3 s `Narrowflat` frames: decker B1, `iodin = F`, **hatch
+   closed**, `echangl` 0.00106-0.00114, `xdangl` -0.5420 — inside the angle
+   tolerances of the whole July 15-19 run, and typed `IntFlat` automatically.
+   That night also carries 8 hatch-closed B1 ThAr arcs. **This is the cleanest
+   fix for the flat problem and was not visible in the prompt-3 survey.**
+   (1998-08-12 has ~18 more clean B1 flats if wanted.)
+4. **The B1 iodine flats carry the I2 forest and PypeIt has no `IODIN` logic** —
+   nothing stops a user typing them `pixelflat`; use them as `trace` only, if at
+   all. Confirms risk 3.
+5. **Biases/darks are not required at all** (`use_biasimage = False`), so risk 5
+   is largely void. If wanted anyway, the July-14 biases are untyped because the
+   Bias/Dark branch requires the covers *open* and theirs were shut — they would
+   need hand-typing.
+6. **July 19 still needs cross-night calibrations**; the code imposes no date
+   constraint on calibration groups, so a `calib` column assignment works.
+   Confirms risk 1.
+7. **Saturated arcs are handled**: wavecalib rejects lines above
+   `nonlinear_counts` (~87,200 e-), and the echelle method cross-correlates
+   against the archived composite arc, so one arc per night suffices. Refines
+   risk 6 downward.
+8. **The binning inversion is real but narrow.** Header `BINNING = '1,2'` becomes
+   the PypeIt string `'2,1'` (binspec 2, binspat 1), while `specaxis = 1` means
+   the *column* axis (binned x1) is spectral and the *row* axis (binned x2) is
+   spatial — i.e. physically binspec 1, binspat 2, the opposite of the label.
+   Consequences are limited: the echelle wavelength solution does not use
+   `binspectral` at all, and `bpm` is correct *because* it inverts the naming a
+   second time (L1126). What is affected is `order_platescale`
+   (0.216 instead of 0.432 "/binned pixel, so anything in arcsec, including the
+   1.5" boxcar radius, is off by 2x) and the `detector.binning` string written
+   into spec1d/spec2d headers. **Not fixable from a `.pypeit` file** — it is an
+   upstream fix, one for Ryan Cooke.
+   **The `config_specific_par` / 6200-px half of prompt-3 risk 7 is void**: that
+   method belongs to the post-2004 class and is unreachable here.
+9. **`get_rawimage` reads `PREPIX`, not `PRECOL`** (L1039) — and the KOA metadata
+   only exposes `PRECOL = 21`. If the 1998 headers lack a `PREPIX` card this is a
+   hard `KeyError` on every frame. **Undecidable without a real file; prompt 5
+   must check.** Expected layout: `NAXIS1 = 2*PREPIX + 2048 + POSTPIX`.
+10. **Header logicals must be genuine FITS booleans.** All the typing logic and
+    the gain selection do truthiness tests on raw cards. If `HATOPEN`, `AUTOSHUT`,
+    `XCOVOPEN`, `RCCVOPEN`, `LAMPCAT1/2`, `LAMPQTZ2` or `CCDGAIN` are stored as
+    the *strings* `'T'`/`'F'`, science frames would type as `Line` and
+    `get_detector_par` would raise "Bad CCDGAIN mode". **Prompt 5 must print the
+    card types.**
+11. **`mjd` needs an `MJD` card, or `DATE-OBS` + `UTC`.** If neither exists the
+    error is swallowed and `mjd = None`, which cascades into `dispname` and
+    `idname` failing and the frame going untyped. Prompt 5 to confirm.
+12. **`target` will read `Star+Iodine`**, not `187123`, because the Orig class
+    takes `target` from `OBJECT`. Output basenames inherit it. Cosmetic;
+    editable in the `.pypeit` data block.
+13. **Filter the download.** Bida's 83 frames and 300+ other planet-search frames
+    per night all arrive untyped, and the D5 focus frames would form a spurious
+    arc-only setup. Confirms risk 8.
+14. **Upstream nits banked**: `check_spectrograph` L567 constructs a
+    `PypeItError` without `raise` (a no-op); `config_independent_frames`'
+    docstring claims a `DATE-OBS` rule the code does not implement; `spectrim`,
+    `PRELINE` and `POSTLINE` are read but unused in the Orig reader.
+
 ## Logs
 
 ### 2026-09-19 (Prompt 1: confirmed PypeIt `develop` is ready for the original HIRES detector)
@@ -551,3 +720,73 @@ counts (2, 2, 1, 1, 0), the ThAr1/B1/10 s configuration, the 16-per-night B2
 
 **No FITS data was downloaded, no PypeIt source was edited, and no git command
 changed state.**
+
+### 2026-09-20 (Prompt 4: read `keck_hires_orig`, compared it against the archive, listed the gaps)
+
+**Task.** Read `keck_hires_orig` in the PypeIt source, report what it expects
+(header cards, configuration keys, detector parameters, frame-typing rules,
+required calibrations, default `PypeItPar`), compare that against the prompt-3
+archive survey, and list every gap. No editing. Delegated to a Fable subagent as
+the prompt asked; the load-bearing claims were then re-verified here against the
+source and against the saved KOA CSVs. Findings are in the `## Report` section.
+**Nothing was edited in either repository.**
+
+**The one result that changes the plan:** `par['scienceframe']['exprng']` is
+`[601, None]`, and every HD 187123 frame in the July run is 215-427 s. So **the
+science frames will not be typed as science by the automatic pass** — they will
+be commented out of the `.pypeit` file. This is now the most certain obstacle
+for prompts 6-7, and it is a one-line fix in the data block rather than anything
+deep. I verified the parameter and the `check_frame_type` logic directly in the
+source.
+
+**The best new finding:** the flat problem has a clean solution one night
+earlier. 1998-07-14 (D. Latham, N10H) carries **four iodine-free, hatch-closed,
+decker-B1 3 s "Narrowflat" frames** — `HI.19980714.07711`, `.07810`, `.07910`,
+`.55408` — with `echangl` 0.00106-0.00114 and `xdangl` -0.5420, inside the angle
+tolerances of the entire July 15-19 run, and typed `IntFlat` automatically. That
+night also has 8 hatch-closed B1 ThAr arcs. Prompt 3 had concluded the only B1
+flats were the iodine ones; that is true *within* the run, but not for the night
+before it. I verified this against the saved CSV rather than taking it on trust.
+**Prompt 5 should download the July 14 flats along with whichever night it
+picks.**
+
+**What I learned about the repository / PypeIt.**
+
+1. *Inheritance matters more than it looks.* `KeckHIRESOrigSpectrograph` derives
+   from `KECKHIRESBaseSpectrograph`, **not** from the post-2004
+   `KECKHIRESSpectrograph`. Confirmed at runtime from the MRO. This voids half of
+   prompt-3's risk 7 — `config_specific_par`, with its mosaic-sized 6200 px
+   `order_spat_range` and its `fwhm = 8.0/bin_spec`, is simply unreachable for
+   our class, and `order_spat_range` correctly defaults to `[0, 1024]`. A good
+   reminder to check reachability before recording a risk.
+2. *Frame typing hangs entirely on instrument logicals, not on an image-type
+   card.* The commented-out `IMAGETYP` line in the Orig `init_meta` is dead code;
+   `idname` is computed from `HATOPEN`, `AUTOSHUT`, `XCOVOPEN`, `RCCVOPEN`,
+   `LAMPCAT1/2`, `LAMPQTZ2` and `LAMPNAME`. Two consequences worth remembering:
+   flats require the hatch **closed** (arcs do not care), and biases require the
+   covers **open**, which is why the July-14 biases will also come out untyped.
+3. *Bias and dark are not required calibrations here.* `use_biasimage` and
+   `use_darkimage` are False for every frame type, with overscan used instead.
+   Prompt-3's "no biases on the run nights" risk is therefore mostly void — a
+   useful reduction in scope for prompt 5's download.
+4. *The echelle angle files are already on disk and git-tracked*
+   (`keck_hires_orig_angle_fits.fits`, `keck_hires_composite_arc.fits` in
+   `pypeit/data/arc_lines/reid_arxiv/`). I had expected a
+   `pypeit_cache_github_data` step to be needed before any reduction; it is not.
+5. *Three things are genuinely undecidable without a real frame*, and prompt 5
+   should print them before anything else: whether the header has a **`PREPIX`**
+   card (the Orig reader uses `PREPIX`, while KOA only exposes `PRECOL = 21`, and
+   its absence is a hard `KeyError`); whether the logicals are FITS booleans
+   rather than `'T'`/`'F'` strings (as strings, science frames would mistype as
+   arcs and the gain lookup would raise); and whether `MJD` or `UTC` is present.
+6. *The binning inversion is real but narrower than feared.* The PypeIt binning
+   string comes out `'2,1'` for a `'1,2'` header while `specaxis = 1` makes the
+   opposite true physically. But the echelle wavelength path never uses
+   `binspectral`, and `bpm` is correct precisely because it inverts the naming
+   again. The live consequences are `order_platescale` (2x, so arcsec quantities
+   like the 1.5" boxcar radius) and mislabelled output headers. It cannot be
+   fixed from a `.pypeit` file; it is an upstream report, and Ryan Cooke is the
+   contact. Three smaller upstream nits are banked in the Report.
+
+**No PypeIt source was edited, no files were created, and no git command changed
+state.** The only change is this document.
