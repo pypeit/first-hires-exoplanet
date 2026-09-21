@@ -719,6 +719,87 @@ for sane output basenames; optionally drop the two 07-14 arcs if single-night
 arcs are preferred (the pixel check says stacking is harmless). Do **not**
 reduce Setup B — it has flats but no science.
 
+### Prompt 8 (2026-09-20): the reduction runs — 37 orders extracted
+
+PypeIt `2.0.2.dev1217+g017bece06` (branch `orig-hires-fixes`). Working directory
+`first-hires-exoplanet-data/redux/reduce_jul16/`, outside the repository. Every
+step below was reproduced from the pristine prompt-7 output; each parameter was
+added one at a time and verified.
+
+#### The baseline fails silently
+
+`run_pypeit` on the unmodified prompt-7 file **exits 0 and prints "Data reduction
+complete"**, but writes only a `spec2d` — **no `spec1d` at all**. The log carries
+`No objects found automatically` 28 times, and
+`findobj_skymask.py:2144` explains itself: *"No objects were found because the
+image was heavily masked, not because no source was detected."* Runtime 5 min.
+
+**A reduction that produces no 1D spectrum should not exit 0.** That is the
+first genuine issue this prompt found, and it is PypeIt-wide rather than
+HIRES-specific.
+
+#### Mechanism: the orders are too narrow for the default edge trim
+
+Measured from `Slits_A_0_DET01`: the B1 (3.5") orders are **10.32 binned pixels
+wide** (min 9.47, max 14.21). The inherited default `find_trim_edge = [3, 3]`
+masks six of those ten columns, leaving **4.3 px** for object finding.
+
+This is a direct consequence of the 2x spatial binning: at 1x1 the orders would
+be ~21 px and `[3, 3]` would be unremarkable. It surfaces now precisely *because*
+prompt 6 fixed the binning inversion, so `order_platescale` finally returns the
+correct 0.432"/binned pixel. The default is inherited from the post-2004 mosaic
+class, where the slits are much wider in pixels.
+
+#### Three parameters, each justified by its own run
+
+| run | parameters | result |
+|---|---|---|
+| baseline | (automatic file) | 28/37 orders find nothing; **no spec1d** |
+| v1 | `find_trim_edge = 1,1` | 25/37 still fail; **still no spec1d** — necessary but **not sufficient** |
+| v2 | + `skip_skysub = True` | **spec1d written**, 37 orders; 34 good, but orders 84, 81, 77 at S/N 17.9, **-1.9**, 17.5 |
+| **v3** | + `no_local_sky = True` | **37/37 orders clean**; those three recover to S/N 94, 108, 125 |
+
+`skip_skysub` and `no_local_sky` have the same physical cause: HD 187123 (V=7.9)
+in a 400 s exposure **fills the ~10 px slit**, so neither the global nor the
+local sky fit has object-free pixels to work with. The sky is well under 1% of
+the stellar peak here, so skipping it costs nothing.
+
+Notably, `min_frac_prof = 0.5` was **not** needed — the default 0.9 gives clean
+extractions once the sky handling is right.
+
+#### Final result (v3)
+
+- **37 echelle orders extracted, 93 down to 57**, one object (`OBJ0525-DET01`).
+- **S/N 33 at the blue end rising to 164 in the red**, median **124.5**; no order
+  below 20.
+- **Wavelength solutions for all 37 orders**, RMS **0.069-0.195 px**, median
+  0.133; **none above 0.2 px**. The 10 s arcs with saturated lines were not a
+  problem — `nonlinear_counts` rejection plus the archived composite arc did the
+  job, exactly as prompt 4 predicted.
+- Calibrations built without incident: `Edges`, `Slits`, `Flat`, `Arc`,
+  `Tiltimg`, `Tilts`, `WaveCalib`. QA HTML written for the calibration group and
+  the science frame.
+- Runtime: 5 min for the full pass including calibrations; ~40 s for a
+  science-only re-run.
+
+The final input file is `keck_hires_orig_A.pypeit`, with the intermediate
+versions kept as `.v0_auto`, `.v1_trimedge`, `.v2_skipsky`, `.v3_nolocalsky` so
+the path from the automatic output is auditable.
+
+#### Genuine issues for upstream (items 5-7 for Ryan Cooke)
+
+5. **`run_pypeit` exits 0 having written no `spec1d`.** Object finding failed in
+   every order and the run still reported success. A non-zero exit, or at least a
+   prominent warning, would have saved the whole diagnosis.
+6. **`find_trim_edge = [3, 3]` is untenable for `keck_hires_orig` at 2x spatial
+   binning**, where the B1 orders are ~10 px wide. Worth a binning-aware default,
+   or an Orig-class override, rather than leaving every user to rediscover it.
+7. **The `spec1d_*.txt` summary is appended to, not overwritten, across
+   `run_pypeit -o` runs**, silently accumulating duplicate tables (74 rows for 37
+   orders after two runs). Minor, but it will mislead anyone parsing it.
+
+Nothing here contradicts the prompt-6 fixes; they behaved as intended throughout.
+
 ## Logs
 
 ### 2026-09-19 (Prompt 1: confirmed PypeIt `develop` is ready for the original HIRES detector)
@@ -1277,3 +1358,64 @@ runs (verified byte-identical apart from the UTC stamp). Two small diagnostic
 scripts live in the data tree at `redux/checks/`; bring them into the repo if you
 want them committed. No data artefact of any kind is inside the repository, and
 no git command changed state.
+
+### 2026-09-20 (Prompt 8: reduced 1998-07-16 — 37 orders, S/N 33-164)
+
+**Task.** Reduce the night with `run_pypeit`, diagnose any failure with the
+`diagnose-reduction` skill, fix what belongs in the input file, and separate
+genuine PypeIt bugs from configuration mistakes. Results are in the `## Report`
+section. **The reduction works**: 37 orders, S/N 33-164, all wavelength
+solutions under 0.2 px RMS.
+
+**An honest account of how this went.** I attempted to delegate this to a Fable
+subagent; the launch was rejected, and I said I would do it myself. In fact the
+subagent had already started, and by the time I looked at the directory it held
+three runs and three edited `.pypeit` files. I misread that as activity from an
+unknown source and said so to the user, when checking the timestamps against my
+own actions (staging at 06:14:43, runs beginning 06:16:10) would have identified
+it immediately. Two lessons: **reconcile unexpected state against my own recent
+actions before attributing it elsewhere**, and note that **a rejected tool call
+may still have executed** — do not assume the rejection means nothing ran.
+
+That work was not wasted, but it could not be adopted as it stood. Its `.pypeit`
+comment asserted that the baseline failed because "every order ended flagged
+BADSKYSUB"; that string appears **zero** times in the run log. The actual symptom
+was `No objects found automatically`. Since these comments are destined for a
+public reduction recipe, I moved the directory aside as
+`reduce_jul16_prior_unverified/` and rebuilt from the pristine prompt-7 file,
+adding one parameter at a time. The conclusion held — but one of the three
+parameters that run used (`min_frac_prof = 0.5`) turned out to be **unnecessary**,
+and I would have carried it forward as folklore had I simply adopted the file.
+
+**What I learned.**
+
+1. *The real mechanism is geometric, and it is a consequence of our own fix.*
+   The B1 orders are 10.32 binned pixels wide; `find_trim_edge = [3, 3]` leaves
+   4.3 px, and object finding drowns. It only became visible now because prompt 6
+   corrected the binning inversion so `order_platescale` returns the true
+   0.432"/binned pixel. A fix in one place surfaced a latent default problem in
+   another.
+2. *Incremental verification paid for itself immediately.* `find_trim_edge` alone
+   is necessary but **not** sufficient (25 of 37 orders still failed). Had I
+   applied all three parameters at once I would have learned nothing about which
+   mattered, and would have shipped a fourth that does nothing.
+3. *`run_pypeit` exits 0 with no 1D spectrum.* The most costly property of this
+   whole task: a silent failure that looks like success. Banked as an upstream
+   item.
+4. *The `diagnose-reduction` skill's warning about stale cached calibrations is
+   the real thing to remember here.* `-o` overwrites science products but reuses
+   `Calibrations/`. That is legitimate when only `reduce` parameters change (as
+   in v1-v3, which is why re-runs took 40 s rather than 5 min), and a trap the
+   moment frame typing or calibration grouping changes.
+5. *The star fills the slit.* Both sky-related parameters trace to one physical
+   fact: a V=7.9 star in a 3.5" slit at 400 s leaves no sky pixels. This will be
+   true of **every** frame in this programme, so the same three parameters should
+   carry to the other nights in prompt 10.
+
+**Upstream tally is now seven items** for Ryan Cooke: the four code bugs from
+prompt 6, the science-floor policy choice, the gain/read-noise question, and now
+the silent-success exit code, the `find_trim_edge` default at 2x binning, and the
+appending `spec1d_*.txt`.
+
+No repository file changed; all products are in the data tree. No git command
+changed state.
