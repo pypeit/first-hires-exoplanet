@@ -156,8 +156,11 @@ reproducible statement on its own.
 
 11. Read this file. Write a short assessment of phase 1: whether the reduction is
     sound and how we know, what PypeIt handled well, what needed intervention,
-    anything worth reporting upstream, and what phase 2 would require. Use
-    Fable if you can. Log your work.
+    anything worth reporting upstream, and what phase 2 would require. 
+    If you haven't seen it yet, make note of this GitHub repository: 
+    `https://github.com/pepeheeren/pyodine` 
+    It might be helpful for phase 2 -- update the `context_prompts.md` file with this information includinig a new prompt to create the `data_phase2_prompt.md` file.
+    Use Fable if you can. Log your work.
 
 ## Q&A
 
@@ -875,6 +878,80 @@ as flagged gaps. The figure script converts non-positive flux to NaN so they
 plot as gaps; anyone consuming `spec1d` numerically should mask `OPT_COUNTS <= 0`
 as well.
 
+### Prompt 10 (2026-09-21): the whole 1998 July run — the reduction is stable
+
+All five nights reduced with PypeIt `2.0.2.dev1217+g017bece06`. Driver:
+`first_hires_exoplanet/reduce_run.py`; per-night products in
+`first-hires-exoplanet-data/redux/reduce_1998071*/`, summary in
+`redux/run_summary.json`.
+
+**Method.** Each night is reduced *in isolation* so that any night-to-night
+difference reflects the data rather than the recipe. Each staging directory
+(symlinks, so `pypeit_setup` sees exactly what we intend) holds the night's own
+science frames and B1 ThAr arcs plus the four clean 1998-07-14 B1 `Narrowflat`
+frames, which remain the only iodine-free hatch-closed flats in the science
+configuration anywhere in the run. 1998-07-19, which took no calibrations at
+all, additionally borrows the 07-18 arc. The three prompt-8 parameters
+(`find_trim_edge = 1,1`, `skip_skysub`, `no_local_sky`) are injected unchanged.
+
+Because only B1 frames are staged, `pypeit_setup` now produces a **single**
+configuration per night rather than splitting off the B2 flats — cleaner than
+the prompt-7 arrangement, and no hand-typing is needed anywhere.
+
+#### Result: 37 orders in every frame of every night
+
+| night | frames | orders | S/N min | S/N med | S/N max | wavecal RMS min/med/max (px) | arcs |
+|---|---|---|---|---|---|---|---|
+| 07-15 | 1 | 37 (57-93) | 44.1 | 133.4 | 165.5 | 0.060 / 0.115 / 0.207 | own x2 |
+| 07-16 | 1 | 37 (57-93) | 32.9 | 124.5 | 167.4 | 0.067 / 0.127 / 0.206 | own x2 |
+| 07-17 | 2 | 37, 37 | 38.5, 48.3 | 128.9, 143.2 | 166.1, 203.3 | 0.067 / 0.119 / 0.231 | own x1 |
+| 07-18 | 3 | 37, 37, 37 | 40.1, 39.1, 27.3 | 124.4, 124.4, 143.2 | 152.2, 160.6, 276.4 | 0.060 / 0.117 / 0.225 | own x1 |
+| 07-19 | 3 | 37, 37, 37 | 52.4, 44.5, 10.7 | 146.4, 133.6, 117.3 | 176.0, 164.5, 189.6 | 0.060 / 0.117 / 0.225 | **07-18** |
+
+**All 10 science frames — the full set of discovery-era July epochs — extracted
+37 orders spanning 57 to 93, with no failures and no hand intervention.** Median
+S/N per frame lies between 117 and 146; wavelength RMS medians between 0.115 and
+0.127 px, with every order under 0.24 px.
+
+#### Three things this establishes
+
+**The cross-night calibration borrow works.** 07-19's wavelength RMS is
+identical to 07-18's (0.060 / 0.117 / 0.225) because it is literally the same
+arc, `HI.19980718.54587`, taken 15.8 h before the night's first science frame.
+Its three frames still give median S/N 117-146 across 37 orders. The night with
+no calibrations of any kind reduces as well as the others.
+
+**The recipe is reproducible.** 07-16 was re-reduced here under a slightly
+different arrangement from prompt 8 — only its own two arcs, where prompt 8's
+setup had merged the 07-14 arcs in as well. It returned 37 orders, S/N
+32.9 / 124.5 / 167.4 against prompt 8's 32.9 / 124.5 / 167.5, and RMS median
+0.127 against 0.133. Changing the arc set moved nothing that matters.
+
+**Same-night arcs are not required.** 07-17 and 07-18 have only one arc each,
+07-19 none; their solutions are indistinguishable from the two-arc nights.
+
+#### The one blemish
+
+**Order 60 of `HI.19980719.49996` collected 122 counts, against 51,000-110,000
+in that same order in all nine other frames.** It is the only anomaly in the
+run. The frame is otherwise sound (37 orders, median S/N 117), and the problem
+is local: order 61 and 59 either side hold ~8,000 counts per pixel, order 60
+holds ~120. Adjacent-order S/N scatter for this frame is 6.2% against 1.8-2.0%
+for the other two 07-19 frames, so it is detectable without knowing the cause.
+
+This is an isolated extraction failure in one order of one frame, not a
+night-level instability. It is the last frame of the night (13:53 UT, airmass
+1.52) and the likeliest cause is the object trace losing the star in that order.
+**Phase 2 should reject it on the adjacent-order smoothness statistic rather
+than trusting all 370 order-spectra blindly.**
+
+#### Verdict
+
+The reduction is stable from night to night. Order count is invariant, S/N and
+wavelength RMS vary within a narrow band that tracks exposure time and
+conditions rather than the recipe, and the only night with no calibrations of
+its own is indistinguishable from the rest.
+
 ## Logs
 
 ### 2026-09-19 (Prompt 1: confirmed PypeIt `develop` is ready for the original HIRES detector)
@@ -1556,3 +1633,61 @@ excellent, but the number I would have published was meaningless.
 **New file (untracked):** `first_hires_exoplanet/figs_phase1.py`, plus four PNGs
 in `docs/figs/`. No raw data or reduction product is in the repository; no git
 command changed state.
+
+### 2026-09-21 (Prompt 10: reduced all five July nights — stable, 37 orders every time)
+
+**Task.** Reduce the remaining nights of the 1998 July run the same way as
+1998-07-16 and report whether the reduction is stable night to night. Results
+are in the `## Report` section. **It is stable**: all 10 science frames across
+the five nights extracted 37 orders (57-93) with no failures and no hand
+intervention.
+
+**Work done.** Downloaded the 13 remaining frames (9 science + 4 arcs), matching
+the prompt-3 survey exactly including 07-19's zero arcs. Extended
+`koa_download.py` to all six nights, and wrote `reduce_run.py` to stage, set up,
+reduce and summarise each night with one command.
+
+**What the run establishes.**
+
+1. *The cross-night calibration borrow genuinely works.* 1998-07-19 took no
+   calibrations whatsoever, and its three frames reduce as well as any other
+   night using the 07-18 arc from 15.8 h earlier. Its wavelength RMS is
+   byte-identical to 07-18's, which is the expected signature of the same arc
+   and a useful confirmation that the borrow took effect rather than silently
+   falling back to something else. The biggest risk flagged back in prompt 3 has
+   turned out to cost nothing.
+2. *The recipe reproduces.* Re-reducing 07-16 under a deliberately different arc
+   set (its own two arcs, rather than prompt 8's four) returned S/N
+   32.9 / 124.5 / 167.4 against 32.9 / 124.5 / 167.5, and RMS median 0.127
+   against 0.133. That is a real reproducibility check, not a re-run of the same
+   command.
+3. *Same-night arcs are not needed.* One arc, two arcs or a borrowed arc all
+   give wavelength RMS medians within 0.115-0.127 px.
+
+**What I learned about the work.**
+
+1. *Staging each night as a symlink directory was the right call.* It gives
+   `pypeit_setup` exactly the intended frames, produces a single configuration
+   per night instead of splitting off the B2 flats, and removes the hand-typing
+   that prompts 7-8 had to reason about. The prompt-7 arrangement was an
+   artefact of downloading whole nights.
+2. *Identifying the science setup by content, not by name, matters.* Setup
+   letters are not stable between runs (noted in prompt 7), and my first
+   implementation matched the literal string `'| science |'`, which failed
+   because the columns are whitespace-padded. Parsing the frametype field
+   properly fixed it. A reminder that generated fixed-width tables need parsing,
+   not substring matching.
+3. *A cheap statistic caught the one bad order.* Order 60 of
+   `HI.19980719.49996` holds **122 counts** where the same order in the other
+   nine frames holds 51,000-110,000. I found it by looking at why one frame's
+   S/N minimum was 10.7, then confirmed it by comparing that order across all
+   ten frames. The adjacent-order S/N scatter (6.2% for this frame against
+   1.8-2.0% for its neighbours on the same night) detects it without knowing the
+   cause, which is what phase 2 should use: **370 order-spectra is too many to
+   inspect by eye, and one of them is bad.**
+4. *`reduce_run.py` deletes `Science/` before every run*, because of the spec1d
+   accumulation bug from prompt 9. Worth keeping in any future driver.
+
+**New/changed files (untracked):** `first_hires_exoplanet/reduce_run.py`, and
+`koa_download.py` extended from two nights to six. No raw data or reduction
+product is in the repository; no git command changed state.

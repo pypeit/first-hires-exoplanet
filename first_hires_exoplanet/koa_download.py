@@ -98,8 +98,20 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_OUTROOT = os.path.join(os.path.dirname(REPO_ROOT),
                                'first-hires-exoplanet-data', 'raw')
 
-#: UT night ('YYYYMMDD', the middle field of a KOAID) -> output sub-directory
-NIGHT_DIRS = {'19980716': '1998jul16', '19980714': '1998jul14'}
+#: UT night ('YYYYMMDD', the middle field of a KOAID) -> output sub-directory.
+#: 07-16 was reduced first (prompts 5-9); 07-15/17/18/19 are the rest of the
+#: five-night run, added for prompt 10.  07-14 is not part of the run: it is
+#: D. Latham's night, and supplies the only clean B1 flats in the science
+#: configuration (see the prompt-4 Report).
+NIGHT_DIRS = {'19980714': '1998jul14', '19980715': '1998jul15',
+              '19980716': '1998jul16', '19980717': '1998jul17',
+              '19980718': '1998jul18', '19980719': '1998jul19'}
+
+#: The remaining nights of the run.  Each needs only its own science frames and
+#: whatever B1 ThAr arcs it has; the flats come from 07-14, which is the only
+#: source of clean B1 flats.  1998-07-19 has no calibrations of any kind and
+#: borrows the 07-18 arc (see the prompt-3 Report).
+REST_OF_RUN = ('19980715', '19980717', '19980718', '19980719')
 
 #: Sub-directory, under the output root, for frames we only want to look at
 INSPECT_DIR = 'inspect_only'
@@ -142,6 +154,18 @@ SELECTIONS = [
          where="koaimtyp = 'bias' AND elaptime = 0",
          keep=(3, 'nearest_to', 'flat_B1_clean')),
 ]
+
+# ---- the remaining nights of the run: science plus any B1 ThAr arc ---------
+for _night in REST_OF_RUN:
+    SELECTIONS.append(dict(
+        label='science', night=_night,
+        where="koaimtyp = 'object' AND (targname LIKE '%187123%' "
+              "OR object LIKE '%187123%')",
+        keep=None))
+    SELECTIONS.append(dict(
+        label='arc_B1', night=_night,
+        where="koaimtyp = 'arclamp' AND deckname = 'B1' AND lampname = 'ThAr1'",
+        keep=None))
 
 #: Chunk size for streaming downloads, bytes
 CHUNK = 1 << 20
