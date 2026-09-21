@@ -800,6 +800,81 @@ the path from the automatic output is auditable.
 
 Nothing here contradicts the prompt-6 fixes; they behaved as intended throughout.
 
+### Prompt 9 (2026-09-21): inspection of the 1998-07-16 reduction
+
+Figures: `first_hires_exoplanet/figs_phase1.py` ->
+`docs/figs/fig_p1_{orders,wavecal,iodine,spectrum}.png`. The script reads the
+reduction from the sibling data tree (`--redux` to point elsewhere) and refuses
+to run against a directory holding more than one accumulated pass.
+
+**Verdict: the reduction is sound.** Every check below passes, and two of them
+are independent confirmations rather than internal consistency.
+
+#### Order tracing and flat field
+
+**37 orders traced, none masked.** Order widths are tight and vary smoothly
+with position: median **10.32 binned px**, 9.47 to 10.5 across the detector,
+with a single 12.8 px outlier at the extreme edge. That smooth run is itself
+evidence the trace is following real orders rather than noise.
+
+The pixel flat over the **0.1M illuminated pixels** has 1-99 percentile
+**0.959-1.024**, i.e. pixel-to-pixel response flat to about +/-3%, single-peaked
+and near-symmetric about 1.0. (Taken over the whole frame the spread looks like
+0.986-1.003, but that is meaningless: pixels outside the traced orders are left
+at exactly 1.0 and swamp the histogram.)
+
+#### Wavelength solution
+
+**All 37 orders solved, none above 0.2 px RMS**: 0.069 to 0.195, median
+**0.133 px**, with no trend from blue to red. The 10 s arcs with hundreds of
+saturated pixels were not a problem.
+
+**The zero point is independently correct.** Measuring seven strong photospheric
+lines against their *vacuum* rest wavelengths gives **-12 to -16 km/s,
+mean -14.7 km/s**, consistent across 3935-5185 A. HD 187123's systemic velocity
+is about **-17 km/s**, and `VEL_CORR` shows the +4.2 km/s heliocentric
+correction was applied. So the wavelength scale is right to a few km/s against
+an external truth, not merely internally self-consistent.
+
+**A trap worth recording: PypeIt reports vacuum wavelengths.** Comparing them
+against the air rest wavelengths conventionally tabulated for the optical
+produces a spurious **+70 km/s** redshift (+1.2 A at 5170 A). This is noted in
+the figure script's docstring so nobody repeats it in phase 2.
+
+#### The iodine forest
+
+Present and unmistakable. Counting absorption features per 100 A order by order:
+
+- **3833-4951 A**: density falls smoothly from 356 to 162 lines/100 A -- the
+  normal stellar metal-line crowding, thinning toward the red.
+- **5021 A**: jumps to 282, then **5093-5750 A** sits on a plateau of
+  **386-432 lines/100 A** -- roughly **double** the extrapolated stellar trend.
+- **5844-6236 A**: falls back through 374, 298, 294, 248 to 180 as the band ends.
+
+That is the I2 band at **~500-620 nm**, exactly where the cell puts it. The
+side-by-side order panels make the same point directly: order 73 (4880 A) shows
+resolved, well-separated stellar lines on a flat continuum; order 65 (5484 A)
+shows the dense quasi-continuous forest.
+
+#### Stellar spectrum and signal-to-noise
+
+Coverage is continuous from **3806 to 6262 A** (381-626 nm) over 37 orders. Every
+strong G2V marker in range is present and deep: **Ca II H and K, H-gamma,
+H-beta, and the Mg b triplet**, each at its expected (vacuum) wavelength.
+Na D at 5890/5896 A falls in an inter-order gap -- the free spectral range no
+longer overlaps at the red end, which is expected for this setup, not a defect.
+
+**S/N per pixel rises monotonically from 33 in the bluest order to 168 in the
+reddest, median 124.** The rise is smooth with no discontinuities, as expected
+for a G2V star through this cross-disperser.
+
+#### Residual blemishes
+
+Bad-pixel-masked columns come through the extraction as exact zeros rather than
+as flagged gaps. The figure script converts non-positive flux to NaN so they
+plot as gaps; anyone consuming `spec1d` numerically should mask `OPT_COUNTS <= 0`
+as well.
+
 ## Logs
 
 ### 2026-09-19 (Prompt 1: confirmed PypeIt `develop` is ready for the original HIRES detector)
@@ -1419,3 +1494,65 @@ appending `spec1d_*.txt`.
 
 No repository file changed; all products are in the data tree. No git command
 changed state.
+
+### 2026-09-21 (Prompt 9: inspected the reduction — it is sound)
+
+**Task.** Check order tracing, flat field and wavelength solution against the QA
+products; examine the extracted 1D spectrum for the iodine forest, for G2V
+stellar lines, and for signal-to-noise; write a figure script to disk. Findings
+are in the `## Report` section. **The reduction passes every check.**
+
+Headline numbers: 37 orders traced with none masked; pixel flat good to +/-3%
+over the illuminated pixels; all 37 wavelength solutions under 0.2 px RMS
+(median 0.133); continuous coverage 3806-6262 A; S/N 33 rising to 168 (median
+124); the I2 forest doubling the line density between 5000 and 6200 A; and every
+strong G2V feature in range at its expected wavelength.
+
+**The strongest single result is the velocity zero point.** Seven photospheric
+lines give a mean **-14.7 km/s** against HD 187123's systemic **-17 km/s**. That
+is an *external* check — it tests the wavelength solution against the sky rather
+than against its own arc — and it is the first evidence in this phase that the
+reduction is not merely self-consistent but correct.
+
+**A mistake I made and caught, worth recording because it would have derailed
+phase 2.** My first pass compared observed wavelengths against *air* rest
+values and found a consistent **+70 km/s** offset across every line. I very
+nearly reported it as a wavelength zero-point defect. The cause was entirely
+mine: **PypeIt reports vacuum wavelengths**, and air-to-vacuum at 5000 A is
++1.4 A, almost exactly the offset I measured. The tell was that the "error" was
+suspiciously constant in velocity and matched the refractive index of air. Two
+lessons: an anomaly that is constant in *velocity* across a wide wavelength
+range is far more likely to be a reference-frame mistake than an instrumental
+one, and a 70 km/s systematic in data whose whole purpose is 72 m/s precision
+deserves several minutes of scepticism before it is written down. The trap is
+now recorded in the figure script's docstring.
+
+**A second self-correction.** I first reported the pixel flat as "1-99% =
+0.986-1.003", which is wrong in substance: pixels outside the traced orders are
+left at exactly 1.0 and dominate the histogram. Restricted to the 0.1M
+illuminated pixels the true spread is **0.959-1.024**. The flat is still
+excellent, but the number I would have published was meaningless.
+
+**What I learned.**
+
+1. *`run_pypeit -o` accumulates into `spec1d` rather than replacing it.* The
+   file held **74 entries for 37 orders** — the v2 and v3 passes superimposed,
+   with the *bad* v2 extraction first in the list. Anyone iterating on
+   parameters and then analysing the output would silently mix reductions. I
+   cleared `Science/` and re-ran to get an unambiguous product, and
+   `load_orders()` now refuses to plot a directory in that state. This upgrades
+   the prompt-8 note about the `.txt` summary: the FITS product does it too, and
+   that is a genuine data-integrity issue for upstream.
+2. *Bad columns arrive as exact zeros, not as flagged gaps*, so naive continuum
+   normalisation turns them into full-depth spurious "lines". Mask
+   `OPT_COUNTS <= 0`.
+3. *Na D is not covered*, falling in an inter-order gap — the free spectral range
+   stops overlapping at the red end of this setup. Expected, but worth knowing
+   before someone goes looking for it in phase 2.
+4. *The iodine band is a clean, quantitative diagnostic.* Line density per order
+   is a blunt statistic, but the factor-of-two step at 5000 A against a smoothly
+   falling stellar trend is unambiguous and needs no template.
+
+**New file (untracked):** `first_hires_exoplanet/figs_phase1.py`, plus four PNGs
+in `docs/figs/`. No raw data or reduction product is in the repository; no git
+command changed state.
