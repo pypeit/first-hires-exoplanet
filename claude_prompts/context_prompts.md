@@ -991,3 +991,90 @@ checkout and "PypeIt 2.0.2" is not reproducible on its own.
 
 No git commands were run beyond read-only inspection of the PypeIt repository
 (`log`, `show`, `branch`, `merge-base`).
+
+### 2026-09-22 (Prompt 8: wrote claude_prompts/data_phase2_prompt.md)
+
+Read the phase-1 assessment and the `pyodine` section, then wrote the phase-2
+prompt doc. It follows `data_phase1_prompt.md`'s shape, with an explicit
+"decision this document makes" section answering the question prompt 8 posed.
+
+**The framing decision, and why.** Phase 2 is framed as **producing `pyodine`'s
+inputs and diagnostics; cross-correlation is the instrument, not the
+deliverable.** Three reasons, all from evidence already in hand: the I2 forest
+dominates 5000-6200 A and does not move with the star, pushing the
+cross-correlation onto the ~20 blue orders that are also the low-S/N end (33-96
+against a median 117-146); context Q3 and the phase-1 assessment independently
+put cross-correlation at tens to hundreds of m/s against a 72 m/s semiamplitude;
+and `pyodine` is now a realistic phase-3 target.
+
+But the doc still asks for the velocities to be measured and the achieved
+precision reported honestly, for four stated reasons — the per-epoch initial
+guess `pyodine` needs, an end-to-end consistency check across a nine-month
+baseline, the number we will quote when arguing *why* a forward model is
+necessary, and a filter that catches bad epochs before they reach `pyodine`.
+Measuring a scatter is better than asserting one.
+
+**Three findings from checking rather than assuming, each of which changed the
+doc.**
+
+1. **The FTS iodine atlas is not a gate any more — it ships with `pyodine`.**
+   The repository has an `iodine_atlas/` directory holding
+   `Fischer_Cell_May2022_downsampled3.h5` (54.5 MB) and
+   `song_iodine_cell_01_65C.h5` (38.6 MB), MIT-licensed. "Fischer" is almost
+   certainly **Debra Fischer** — the Lick/Keck lineage, the same tradition as the
+   HIRES cell. This retires the concern in context Q9 and in the phase-1
+   assessment that no public FTS atlas could be found. It does **not** retire the
+   question: an atlas is a scan of one physical cell, and while I2 line
+   *positions* are molecular constants that transfer, line *depths* depend on
+   column density and temperature, which do not. The doc asks phase 2 to
+   establish whether the Fischer atlas describes the HIRES cell adequately,
+   rather than assume it.
+
+2. **The iodine-free stellar template exists in the archive**, and we already had
+   the evidence without knowing it. `koa_hd187123_science.csv` carries `iodin` /
+   `iodout` columns, and **5 of the 37 science frames are cell-out**:
+   1997-12-24 (500 s), 1998-08-12 (60 s), and **three consecutive 500 s
+   exposures on 1998-08-26**. That trio is exactly the deliberate template
+   observation the Butler technique requires. The 1998-08-12 pair — 60 s cell-in
+   at `.29160` and 60 s cell-out at `.29316` — is a ready-made diagnostic pair
+   for isolating the cell's transmission empirically. **None of them is in the
+   July run**, so extending the reduction to 1998-08-26 is on the critical path
+   for phase 3, not an optional extra. That became prompts 3 and 4.
+
+3. **`pyodine`'s instrument adapter is small and its contract is legible.** An
+   instrument is a `utilities_<name>/` directory; the Lick one is five files.
+   `ObservationWrapper` wants `flux` shaped `(nord, npix)`, weights, `nord`,
+   `npix`, `instrument`, `star`, `exp_time`, `bary_date` and `bary_vel_corr`.
+   So the adapter is a tractable, well-specified job — prompt 8 of the new doc.
+
+**And a trap I would rather find now than in phase 3.** `pyodine` expects to
+apply the barycentric correction itself, but PypeIt has **already applied a
+heliocentric** one (+4.2 km/s, recorded in `VEL_CORR` in phase 1). The two
+frames differ by up to about **15 m/s** — roughly 20% of the 72 m/s
+semiamplitude, and far above anything phase 3 aims at. Handing `pyodine`
+heliocentric wavelengths *and* a `bary_vel_corr` would double-correct. The
+likely resolution is to work in the observed frame and let `pyodine` do the
+correction with `astropy`, but that has to be read out of the code and headers,
+not assumed — so it is **prompt 1**, before anything else happens.
+
+Also carried into the doc: the gain/read-noise discrepancy phase 1 deliberately
+left alone (`CCDGN01 = 4.8`, `CCDRN01 = 6.0` against hard-coded 1.9 and 2.8)
+now matters more, because it sets the *weights* a cross-correlation and a
+forward model use; the nine upstream items for Ryan Cooke are still unreported
+and phase 2 is a reasonable moment to send them; and the 32 cell-in frames
+against 30 catalogue velocities should be reconciled rather than assumed.
+
+The doc lists nine prompts: settle the reference frame (1), build the quality
+filter from phase 1's adjacent-order S/N diagnostic (2), extend the reduction
+across the nine-month baseline including the decker change on 1998-09-17 (3),
+co-add the cell-out template (4), cross-correlate on the blue orders (5), assess
+honestly against the published Keplerian and the modern catalogue (6), settle
+the atlas (7), write the `pyodine` adapter (8), and assess phase 2 (9).
+
+**On the model.** The prompt asked for Fable. I am running as Opus 5 and cannot
+change my own model mid-session — that is the user's choice via `/model`, or a
+delegated subagent, which would have started without any of this conversation's
+context and produced a worse document. I wrote it as Opus 5 and am flagging that
+rather than letting the instruction pass silently.
+
+No git commands were run beyond read-only inspection.
