@@ -48,6 +48,56 @@ Use Opus 5.  Log your work.
 7. Ok, we are going to proceed to work on the data.  I will branch off to 
 attack item 1.  Please generate a prompt doc named `data_phase1_prompt.md` in the `claude_prompts` directory.  Use Opus 5.  Log your work.  
 
+8. Phase 1 is complete: see the assessment at the end of the `## Report` section
+   of `data_phase1_prompt.md`. We now have 37 wavelength-calibrated, extracted
+   orders (3806-6262 A) for all 10 discovery-era epochs of the 1998 July run,
+   with the iodine forest plainly visible. Generate a prompt doc named
+   `data_phase2_prompt.md` in the `claude_prompts` directory, covering item 2 of
+   the scope in Q3 (relative radial velocities by cross-correlation).
+
+   **Take account of `pyodine`** (see "Phase 2 and 3: pyodine" below). It is a
+   published, MIT-licensed implementation of exactly the item-3 machinery that
+   Q3 assumed we would have to write ourselves, so the phase-2 doc should be
+   written knowing that phase 3 now looks like *adapting* an existing code
+   rather than building one. In particular, decide and record whether phase 2's
+   cross-correlation is worth doing on its own terms or is better framed as the
+   step that produces the inputs and diagnostics `pyodine` will need.
+
+   Use Fable if you can. Log your work.
+
+## Phase 2 and 3: `pyodine`
+
+`https://github.com/pepeheeren/pyodine`
+
+An open, MIT-licensed Python 3 package that derives precise radial velocities
+from extracted stellar spectra by **forward-modelling the iodine cell**, in the
+Butler et al. (1996) tradition — the same technique behind the 1998 HD 187123
+result. This is directly relevant to item 3 of the Q3 scope, which assumed we
+would have to write or port that machinery ourselves.
+
+- **Paper**: Heeren, Tronsgaard, Grundahl et al. 2023, A&A, 674, A164
+  ([arXiv:2306.13615](https://arxiv.org/abs/2306.13615)). Q3 was written before
+  we knew of it; the "substantial project in its own right" framing should be
+  revisited in its light.
+- **Demonstrated precision**: ~0.69 m/s on a short-term solar time series from
+  SONG, and it recovers the planet-induced variations of HIP 36616 on both SONG
+  and Lick data, generally matching the dedicated instrument pipelines. Against
+  a 72 m/s semiamplitude that is ample.
+- **Instruments**: adapted to Hertzsprung SONG (Teide) and the **Hamilton
+  spectrograph at Lick**, with a modular design intended for adaptation to
+  others. Notably, PypeIt already supports the Lick Hamilton as
+  `shane_hamspec`, so there is precedent for the pairing; HIRES would be a new
+  instrument for `pyodine`.
+- **Inputs it needs**: extracted spectra (which phase 1 now produces), an
+  **iodine FTS atlas**, and reference stellar atlases (Sun, Arcturus) for the
+  initial velocity guess. The FTS atlas is the item most likely to be hard to
+  obtain — Q9 already records that a public FTS iodine atlas was not found when
+  the public document needed one. **Settle the atlas question early**: it gates
+  phase 3 regardless of how well phase 2 goes.
+- **Caveats**: the repository itself is sparse (few commits, no issue traffic),
+  so treat it as a published reference implementation to adapt rather than a
+  maintained dependency to install and trust.
+
 ## Q&A
 
 ### Q1. Which target do you mean by "the first HIRES exoplanet"?

@@ -952,6 +952,128 @@ wavelength RMS vary within a narrow band that tracks exposure time and
 conditions rather than the recipe, and the only night with no calibrations of
 its own is indistinguishable from the rest.
 
+### Phase 1 assessment (2026-09-21)
+
+**Phase 1 succeeded.** The goal was to look at an extracted spectrum from a 1998
+night and say, with reasons, that it is good. We can, and the evidence is
+external rather than merely internal.
+
+**What we have.** All **10 discovery-era epochs** of the 1998 July 15-19 run,
+each extracted into **37 echelle orders (57-93) covering 3806-6262 A**, with
+median S/N per frame between 117 and 146 and every wavelength solution under
+0.24 px RMS. No frame failed, and after the reduction recipe was settled no
+frame needed hand intervention.
+
+#### Is the reduction sound, and how do we know?
+
+Four independent lines of evidence, in increasing order of how hard they would
+be to fake:
+
+1. **Internal calibration quality.** 37 orders traced with none masked, widths
+   varying smoothly (median 10.32 binned px); pixel flat good to about +/-3%
+   over the illuminated pixels; all 37 wavelength solutions below 0.2 px RMS
+   with no blue-to-red trend.
+2. **The iodine forest is where the cell puts it.** Absorption-line density
+   falls smoothly from 356 to 162 per 100 A through the stellar region, then
+   **jumps to a 386-432 plateau between 5093 and 5750 A** — roughly double the
+   extrapolated stellar trend — and decays back to 180 by 6236 A. That is the I2
+   band at ~500-620 nm, recovered without any template or prior.
+3. **The stellar spectrum is a G2V spectrum.** Ca II H and K, H-gamma, H-beta
+   and the Mg b triplet are all present and deep, each at its expected
+   wavelength.
+4. **The wavelength zero point is externally correct.** Seven photospheric lines
+   measured against *vacuum* rest wavelengths give **-14.7 km/s** against
+   HD 187123's systemic **-17 km/s**, with the +4.2 km/s heliocentric correction
+   applied. This is the decisive check: it tests the solution against the sky,
+   not against its own arc.
+
+To which add **reproducibility**: 1998-07-16 was reduced twice under
+deliberately different arc sets and returned S/N 32.9 / 124.5 / 167.4 against
+32.9 / 124.5 / 167.5.
+
+#### What PypeIt handled well
+
+- **The hard astronomical parts.** Order tracing on 10-px orders, flat fielding,
+  and an echelle wavelength solution from **one 10 s arc** with hundreds of
+  saturated pixels, cross-correlated against the archived composite arc. All 37
+  orders solved on every night.
+- **Cross-night calibration.** 1998-07-19 took no calibrations whatsoever and
+  reduces as well as any other night on the 07-18 arc from 15.8 h earlier.
+- **Frame typing from instrument logicals**, which matched a metadata-only
+  simulation 30/30 before a single file was downloaded.
+- **Configuration grouping**, which correctly merged the 07-14 flats with each
+  night's science on angle tolerances that we then verified physically
+  (0 to -1 binned px of order shift).
+
+#### What needed intervention
+
+- **Six source fixes** (prompt 6), of which two were real bugs that would have
+  corrupted the data silently: the 21-column prescan offset and the misplaced
+  bad-pixel mask.
+- **Three reduction parameters** (prompt 8), all traceable to one physical fact:
+  a V=7.9 star fills the 3.5" slit, so neither the global nor the local sky fit
+  has object-free pixels, and the inherited `find_trim_edge = 3,3` masks six of
+  ten columns.
+- **One calibration decision**: the only clean B1 flats in the entire run belong
+  to a different programme on 1998-07-14.
+- Nothing else. No hand frame-typing, no manual extraction, no per-night tuning.
+
+#### Worth reporting upstream (nine items for Ryan Cooke)
+
+**Code bugs, fixed on `orig-hires-fixes`:**
+
+1. `get_rawimage` computes the data section with `prepix * 2`, correct only for
+   `NUMAMPS = 2`; single-amplifier frames were offset by 21 columns and the
+   overscan truncated to 213 of 234 columns. Fix: `prepix * namp`.
+2. The MAKEE bad-pixel mask is applied as trimmed column `C - 1`, but its
+   coordinates count raw columns including the prescan; it landed ~20 px from
+   the real defects. Fix: `C - PREPIX`.
+3. The binning string is inverted for the original CCD (`'1,2'` reported as
+   `'2,1'`), making `order_platescale` 0.216 instead of 0.432 "/binned px.
+4. `check_spectrograph` constructs a `PypeItError` without raising it.
+
+**Defaults and behaviour:**
+
+5. `scienceframe.exprng = [601, None]` excludes every bright-target original-CCD
+   exposure; changed to `[1, None]` for the Orig class — a policy choice worth
+   review.
+6. `find_trim_edge = [3, 3]` is untenable at 2x spatial binning where the B1
+   orders are ~10 px wide. A binning-aware default would help.
+7. **`run_pypeit` exits 0 having written no `spec1d`.** The most expensive
+   property we met: a silent failure that reads as success.
+8. **`run_pypeit -o` appends to `spec1d` rather than replacing it**, so
+   iterating on parameters silently superimposes reductions — 74 entries for 37
+   orders, with the *bad* pass listed first. A data-integrity issue.
+9. Docstring errors (`config_independent_frames`' non-existent DATE-OBS rule),
+   and an open **question**: headers give `CCDGN01 = 4.8`, `CCDRN01 = 6.0`
+   against the hard-coded 1.9 e-/ADU and 2.8 e-. We did not change these.
+
+#### What phase 2 would require
+
+Phase 2 is relative velocities by cross-correlation. The inputs now exist; what
+it needs is:
+
+- **A quality filter, not eyeballing.** 370 order-spectra, one of which is bad:
+  order 60 of `HI.19980719.49996` holds 122 counts where the same order holds
+  51,000-110,000 elsewhere. Adjacent-order S/N scatter separates it cleanly
+  (6.2% against 1.8-2.0%).
+- **A decision about the iodine forest.** It is an asset for phase 3 and a
+  liability for phase 2: between 5000 and 6200 A the I2 lines dominate the
+  stellar ones, and they do not move with the star. Either restrict the
+  cross-correlation to the ~20 orders blueward of 5000 A, or model the cell.
+- **Realistic expectations.** Q3 already warned that cross-correlation gives
+  tens to hundreds of m/s against a 72 m/s semiamplitude. The blue orders are
+  also the low-S/N end (33-96). Phase 2 may be best framed as producing the
+  inputs and diagnostics for phase 3 rather than as a velocity result.
+- **The iodine FTS atlas**, which gates phase 3 and was already not found once
+  (context Q9). Settle it early.
+- **`pyodine`** (Heeren et al. 2023, A&A, 674, A164) changes the phase-3 outlook
+  from "write a forward model" to "adapt a published one". Recorded in
+  `context_prompts.md`.
+
+Two cautions carry forward: PypeIt reports **vacuum** wavelengths, and masked
+pixels arrive as exact zeros rather than flagged gaps.
+
 ## Logs
 
 ### 2026-09-19 (Prompt 1: confirmed PypeIt `develop` is ready for the original HIRES detector)
@@ -1691,3 +1813,62 @@ reduce and summarise each night with one command.
 **New/changed files (untracked):** `first_hires_exoplanet/reduce_run.py`, and
 `koa_download.py` extended from two nights to six. No raw data or reduction
 product is in the repository; no git command changed state.
+
+### 2026-09-21 (Prompt 11: phase-1 assessment, and pyodine recorded for phase 2)
+
+**Task.** Assess phase 1; note the `pyodine` repository; update
+`context_prompts.md` with it and with a new prompt to create
+`data_phase2_prompt.md`. The assessment is at the end of the `## Report`
+section; `context_prompts.md` gained prompt 8 and a `## Phase 2 and 3: pyodine`
+section.
+
+**The assessment in one line: phase 1 succeeded.** 10 epochs, 37 orders each,
+3806-6262 A, median S/N 117-146, all wavelength solutions under 0.24 px RMS, and
+— the part that matters — four independent lines of evidence that the reduction
+is correct rather than merely self-consistent, the strongest being the -14.7
+km/s velocity zero point against a -17 km/s systemic velocity.
+
+**On `pyodine`.** I looked it up rather than describing it from the name. It is
+`https://github.com/pepeheeren/pyodine`, and it is **published**: Heeren,
+Tronsgaard, Grundahl et al. 2023, A&A, 674, A164 (arXiv:2306.13615) — the
+README's own "we are in the process of publishing first results" is out of date.
+MIT-licensed Python 3, forward-modelling the iodine cell in the Butler et al.
+(1996) tradition, demonstrating ~0.69 m/s on a SONG solar time series and
+recovering HIP 36616's planet on both SONG and Lick data, generally matching the
+dedicated pipelines. Against a 72 m/s semiamplitude that is ample.
+
+This **materially changes the scope recorded in context Q3**, which called item
+3 "writing (or porting) a PSF-deconvolution RV code ... a substantial project in
+its own right". It is now adaptation of a published reference implementation, and
+I said so explicitly in the new section rather than quietly leaving Q3 to stand.
+
+**Three things I noticed that are worth more than the summary.**
+
+1. *`pyodine` is already adapted to the Lick Hamilton spectrograph, which PypeIt
+   supports as `shane_hamspec`.* So the PypeIt-to-pyodine pairing has precedent
+   on an iodine-cell echelle — but HIRES would be a new instrument for
+   `pyodine`, so the adaptation work is real, not zero.
+2. *The FTS iodine atlas is the true gate on phase 3, not the code.* `pyodine`
+   needs one, and context Q9 already records that a public FTS atlas could not
+   be found when the public document wanted one. I flagged this as the thing to
+   settle early, because it gates phase 3 independently of how phase 2 goes.
+3. *The repository is sparse* (few commits, no issue traffic) even though the
+   paper is solid. I recorded it as a reference implementation to adapt rather
+   than a dependency to install and trust.
+
+**On phase 2's framing.** Writing the assessment made an awkward point concrete:
+the iodine forest is an asset for phase 3 and a liability for phase 2. Between
+5000 and 6200 A the I2 lines dominate the stellar ones and do not move with the
+star, so cross-correlation is pushed onto the ~20 bluer orders, which are also
+the low-S/N end (33-96). Combined with Q3's own warning that cross-correlation
+lands at tens to hundreds of m/s against a 72 m/s signal, phase 2 may be worth
+more as the step that produces inputs and diagnostics for `pyodine` than as a
+velocity result in its own right. I put that as an explicit decision for the
+phase-2 doc to make rather than deciding it here.
+
+**Upstream tally: nine items** for Ryan Cooke — four code bugs (all fixed on
+`orig-hires-fixes`), two defaults, two silent-failure behaviours in `run_pypeit`,
+and the gain/read-noise question we deliberately did not touch.
+
+**Files changed:** `claude_prompts/context_prompts.md` (prompt 8 and the pyodine
+section) and this document. No code, no data, no git state.
