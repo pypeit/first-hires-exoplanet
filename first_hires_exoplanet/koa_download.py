@@ -105,7 +105,29 @@ DEFAULT_OUTROOT = os.path.join(os.path.dirname(REPO_ROOT),
 #: configuration (see the prompt-4 Report).
 NIGHT_DIRS = {'19980714': '1998jul14', '19980715': '1998jul15',
               '19980716': '1998jul16', '19980717': '1998jul17',
-              '19980718': '1998jul18', '19980719': '1998jul19'}
+              '19980718': '1998jul18', '19980719': '1998jul19',
+              # Phase 2 prompt 3: the rest of the discovery era
+              '19971223': '1997dec23', '19971224': '1997dec24',
+              '19980618': '1998jun18', '19980812': '1998aug12',
+              '19980817': '1998aug17', '19980818': '1998aug18',
+              '19980825': '1998aug25', '19980826': '1998aug26',
+              '19980912': '1998sep12', '19980913': '1998sep13',
+              '19980914': '1998sep14', '19980915': '1998sep15',
+              '19980916': '1998sep16', '19980917': '1998sep17',
+              '19980918': '1998sep18'}
+
+#: The remaining discovery-era nights, phase 2 prompt 3, with the decker their
+#: HD 187123 frames were taken through.  Every one of them has ThAr arcs of its
+#: own, unlike 1998-07-19.  Clean B1 flats, however, exist on only five nights
+#: in the whole era -- 07-14, 08-12, 08-17, 09-17 and 09-18 -- because this
+#: program flat-fielded through the wider B2 decker as a matter of course.
+#: 1998-08-12 carries 18 of them and is the flat donor for the August and
+#: September block; see the prompt-3 Report.
+ERA_NIGHTS = {'19971223': 'B1', '19971224': 'B1', '19980618': 'B1',
+              '19980812': 'B1', '19980817': 'B1', '19980818': 'B1',
+              '19980825': 'B1', '19980826': 'B1', '19980912': 'B1',
+              '19980913': 'B1', '19980914': 'B1', '19980915': 'B1',
+              '19980916': 'B1', '19980917': 'B2', '19980918': 'B1'}
 
 #: The remaining nights of the run.  Each needs only its own science frames and
 #: whatever B1 ThAr arcs it has; the flats come from 07-14, which is the only
@@ -166,6 +188,35 @@ for _night in REST_OF_RUN:
         label='arc_B1', night=_night,
         where="koaimtyp = 'arclamp' AND deckname = 'B1' AND lampname = 'ThAr1'",
         keep=None))
+
+# ---- the rest of the discovery era (phase 2, prompt 3) --------------------
+# Each night contributes its HD 187123 frames, every ThAr arc taken through the
+# decker those frames used, and any clean flat of that decker it happens to
+# have.  Most nights have none; the ones that do are the donors.
+for _night, _deck in ERA_NIGHTS.items():
+    SELECTIONS.append(dict(
+        label='science', night=_night,
+        where="koaimtyp = 'object' AND (targname LIKE '%187123%' "
+              "OR object LIKE '%187123%')",
+        keep=None))
+    SELECTIONS.append(dict(
+        label='arc_{:s}'.format(_deck), night=_night,
+        where="koaimtyp = 'arclamp' AND deckname = '{:s}'".format(_deck),
+        keep=None))
+    SELECTIONS.append(dict(
+        label='flat_{:s}_clean'.format(_deck), night=_night,
+        where="koaimtyp IN ('flatlamp', 'trace') AND deckname = '{:s}' "
+              "AND iodin = 'F' AND hatopen = 'F'".format(_deck),
+        keep=None))
+
+# 1998-09-17 observed HD 187123 through the B2 decker and took no B2 ThAr arc.
+# Only three B2 arcs exist in the whole discovery era; 1998-09-15's is the one
+# within PypeIt's echelle-angle tolerance of 09-17 with a usable 10 s exposure
+# (d echangle 0.0004).  Fetch it with the 09-15 night.  See the prompt-3 Report.
+SELECTIONS.append(dict(
+    label='arc_B2_for_0917', night='19980915',
+    where="koaimtyp = 'arclamp' AND deckname = 'B2' AND elaptime >= 5",
+    keep=None))
 
 #: Chunk size for streaming downloads, bytes
 CHUNK = 1 << 20

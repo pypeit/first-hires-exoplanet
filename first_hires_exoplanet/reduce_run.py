@@ -1,4 +1,4 @@
-""" Reduce the five nights of the 1998 July HIRES run on HD 187123.
+""" Reduce the discovery-era HIRES nights on HD 187123.
 
 Each night is reduced in isolation, the same way 1998-07-16 was in prompt 8, so
 that night-to-night differences reflect the data rather than the recipe:
@@ -22,10 +22,38 @@ established in prompt 8 are then injected into the generated `.pypeit` file:
 Nothing here is written inside the git repository: the raw frames, the staging
 directories and the reductions all live in the sibling data tree.
 
+Phase 2 prompt 3 extends this over the whole nine-month discovery era.  The
+flats are the reason that is not a simple loop.  Clean flats -- quartz, hatch
+closed, iodine cell out -- exist on most nights, but almost always through the
+**B2** decker: this program flat-fielded through the wider slit as a matter of
+course.  Clean flats in the **B1** science decker exist on only five nights of
+the entire era: 1998-07-14 (4), 1998-08-12 (18), 1998-08-17 (2), 1998-09-17
+(10) and 1998-09-18 (8).  PypeIt will only accept a flat whose echelle angle is
+within about 0.01 of the science frame's, and the era spans 0.021, so no single
+flat set covers it.
+
+The rule used here, applied uniformly:
+
+  * a night uses **its own** clean flats of its own decker when it has at least
+    four of them;
+  * otherwise it borrows **1998-08-12**'s B1 flats, which are legal for every
+    B1 night of 1998 and sit closest to the middle of the era;
+  * exactly **four** flats are used everywhere, the four nearest in time to the
+    night's science frames, so the recipe does not vary with how many flats a
+    night happened to take;
+  * **1997-12-23 and 1997-12-24 have no legal donor at all.**  Their echelle
+    angles (+0.0149, +0.0160) are more than 0.01 from every clean B1 flat in
+    the era.  They are attempted anyway, and what happens is the answer to
+    prompt 3's "which need intervention".
+
+Unlike 1998-07-19, every other discovery-era night took ThAr arcs of its own,
+so no night after July borrows a wavelength solution.
+
 Run with:
 
     conda run -n pypeit14 python -m first_hires_exoplanet.reduce_run
-    conda run -n pypeit14 python -m first_hires_exoplanet.reduce_run --night 19980719
+    conda run -n pypeit14 python -m first_hires_exoplanet.reduce_run --night 19980826
+    conda run -n pypeit14 python -m first_hires_exoplanet.reduce_run --era
     conda run -n pypeit14 python -m first_hires_exoplanet.reduce_run --summarise-only
 
 """
@@ -71,7 +99,37 @@ NIGHTS = {
     '19980717': ('1998jul17', ()),
     '19980718': ('1998jul18', ()),
     '19980719': ('1998jul19', (os.path.join('1998jul18', 'HI.19980718.54587.fits'),)),
+    # ---- the rest of the discovery era, phase 2 prompt 3 ------------------
+    '19971223': ('1997dec23', ()),
+    '19971224': ('1997dec24', ()),
+    '19980618': ('1998jun18', ()),
+    '19980812': ('1998aug12', ()),
+    '19980817': ('1998aug17', ()),
+    '19980818': ('1998aug18', ()),
+    '19980825': ('1998aug25', ()),
+    '19980826': ('1998aug26', ()),
+    '19980912': ('1998sep12', ()),
+    '19980913': ('1998sep13', ()),
+    '19980914': ('1998sep14', ()),
+    '19980915': ('1998sep15', ()),
+    '19980916': ('1998sep16', ()),
+    # 1998-09-17 is the only B2 night and took no B2 arc; it borrows the
+    # 1998-09-15 B2 arc, which is within tolerance (see the prompt-3 Report).
+    '19980917': ('1998sep17', (os.path.join('1998sep15', 'HI.19980915.60867.fits'),)),
+    '19980918': ('1998sep18', ()),
 }
+
+#: The five nights of the 1998 July run, reduced in phase 1
+JULY_RUN = ('19980715', '19980716', '19980717', '19980718', '19980719')
+
+#: The nights added in phase 2 prompt 3
+ERA_NIGHTS = tuple(n for n in sorted(NIGHTS) if n not in JULY_RUN)
+
+#: The flat donor for every 1998 B1 night without four clean B1 flats of its own
+DONOR_NIGHT = '19980812'
+
+#: How many flats every reduction uses, so the recipe does not vary
+N_FLATS = 4
 
 #: The prompt-8 parameter block, injected before the `# Setup` section
 PARAM_BLOCK = """[reduce]
@@ -95,6 +153,77 @@ SCIENCE_TARGET = '187123'
 # Staging
 # ---------------------------------------------------------------------------
 
+def frame_roles(raw_dir):
+    """ Classify every raw frame in a directory from its own FITS header.
+
+    The archive survey is used to decide what to *download*; what to *reduce*
+    is decided from the headers of the files actually on disk, so a staging
+    directory can never disagree with the frames it contains.
+
+    Args:
+        raw_dir (str): a night's raw directory.
+
+    Returns:
+        list: dicts with 'path', 'role', 'decker', 'mjd'.
+    """
+    from astropy.io import fits
+
+    out = []
+    for path in sorted(glob.glob(os.path.join(raw_dir, 'HI.*.fits'))):
+        hdr = fits.getheader(path)
+        decker = str(hdr.get('DECKNAME', '')).strip()
+        mjd = float(hdr.get('MJD', 0.))
+        if str(hdr.get('TARGNAME', '')).strip() == SCIENCE_TARGET:
+            role = 'science'
+        elif hdr.get('LAMPCAT1') or hdr.get('LAMPCAT2'):
+            role = 'arc'
+        elif (hdr.get('LAMPQTZ2') or str(hdr.get('LAMPNAME', '')).strip() == 'quartz1'):
+            # Clean means hatch closed and the iodine cell out of the beam: a
+            # hatch-open flat sees the sky, and an iodine-in flat would imprint
+            # the I2 forest on the flat field and partly divide it out of the
+            # science frames, which is fatal for phase 3.
+            clean = (not hdr.get('HATOPEN')) and (not hdr.get('IODIN'))
+            role = 'flat' if clean else 'flat_dirty'
+        else:
+            role = 'other'
+        out.append(dict(path=path, role=role, decker=decker, mjd=mjd))
+    return out
+
+
+def choose_flats(night):
+    """ The four clean flats this night's reduction will use.
+
+    Args:
+        night (str): UT night, 'YYYYMMDD'.
+
+    Returns:
+        tuple: (list of paths, provenance string)
+    """
+    subdir = NIGHTS[night][0]
+    own = frame_roles(os.path.join(RAW_ROOT, subdir))
+    science = [f for f in own if f['role'] == 'science']
+    if not science:
+        raise RuntimeError('No science frame for {:s}'.format(night))
+    deck = science[0]['decker']
+    anchors = [f['mjd'] for f in science]
+
+    def nearest(cands):
+        return sorted(cands, key=lambda f: min(abs(f['mjd'] - a) for a in anchors))
+
+    mine = [f for f in own if f['role'] == 'flat' and f['decker'] == deck]
+    if len(mine) >= N_FLATS:
+        chosen = nearest(mine)[:N_FLATS]
+        return [f['path'] for f in chosen], '{:s} own {:s}'.format(night, deck)
+
+    donor = frame_roles(os.path.join(RAW_ROOT, NIGHTS[DONOR_NIGHT][0]))
+    theirs = [f for f in donor if f['role'] == 'flat' and f['decker'] == deck]
+    if len(theirs) < N_FLATS:
+        return [], 'NONE ({:s} has {:d} own {:s} flats, donor {:s} has {:d})'.format(
+            night, len(mine), deck, DONOR_NIGHT, len(theirs))
+    chosen = nearest(theirs)[:N_FLATS]
+    return [f['path'] for f in chosen], '{:s} {:s}'.format(DONOR_NIGHT, deck)
+
+
 def stage_night(night, overwrite=False):
     """ Build a symlink directory holding exactly the frames for one night.
 
@@ -115,7 +244,14 @@ def stage_night(night, overwrite=False):
 
     sources = sorted(glob.glob(os.path.join(RAW_ROOT, subdir, 'HI.*.fits')))
     sources += [os.path.join(RAW_ROOT, f) for f in borrowed]
-    sources += [os.path.join(RAW_ROOT, FLAT_NIGHT, f) for f in FLAT_FRAMES]
+    if night in JULY_RUN:
+        # Phase 1's five nights keep the exact flat set they were reduced with,
+        # so their results stay comparable with what is already reported.
+        sources += [os.path.join(RAW_ROOT, FLAT_NIGHT, f) for f in FLAT_FRAMES]
+    else:
+        flats, provenance = choose_flats(night)
+        print('  flats: {:s}'.format(provenance))
+        sources += [f for f in flats if f not in sources]
 
     for src in sources:
         if not os.path.isfile(src):
@@ -280,7 +416,7 @@ def print_summary(summaries):
     """ Print the night-to-night comparison table. """
     print()
     print('=' * 96)
-    print('NIGHT-TO-NIGHT STABILITY, 1998 July run')
+    print('NIGHT-TO-NIGHT STABILITY, HD 187123 discovery era')
     print('=' * 96)
     print('{:<10s} {:>6s} {:>7s} {:>9s} {:>8s} {:>8s} {:>8s}   {:s}'.format(
         'night', 'frames', 'orders', 'orders', 'S/N min', 'S/N med', 'S/N max',
@@ -307,17 +443,31 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--night', action='append', choices=sorted(NIGHTS),
                         help='UT night to reduce (repeatable; default: all)')
+    parser.add_argument('--era', action='store_true',
+                        help='reduce only the nights added in phase 2 prompt 3')
     parser.add_argument('--overwrite', action='store_true',
                         help='rebuild staging, setup and reduction directories')
     parser.add_argument('--summarise-only', action='store_true',
                         help='skip the reductions; just report what is on disk')
     args = parser.parse_args()
 
-    nights = args.night or sorted(NIGHTS)
+    nights = args.night or (list(ERA_NIGHTS) if args.era
+                            else sorted(NIGHTS))
 
+    failures = {}
     if not args.summarise_only:
         for night in nights:
-            reduce_night(night, overwrite=args.overwrite)
+            try:
+                reduce_night(night, overwrite=args.overwrite)
+            except Exception as exc:
+                # One night failing must not abandon the other eighteen; the
+                # point of prompt 3 is to find out which nights need help.
+                failures[night] = str(exc)
+                print('  FAILED: {:s}'.format(exc))
+    if failures:
+        print('\n{:d} night(s) failed:'.format(len(failures)))
+        for night, msg in sorted(failures.items()):
+            print('  {:s}: {:s}'.format(night, msg))
 
     summaries = [summarise(n) for n in sorted(NIGHTS)]
     print_summary(summaries)
