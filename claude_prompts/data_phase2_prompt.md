@@ -441,6 +441,193 @@ Two docstrings in `pyodine/components.py` are **stale, and both are traps**:
    reconciled with them afterwards.
 
 
+### Prompt 2: the quality filter
+
+Written as `first_hires_exoplanet/quality_filter.py`, which emits
+`first_hires_exoplanet/data/order_quality.csv` — one row per (epoch, order),
+370 rows:
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.quality_filter
+```
+
+Provenance: PypeIt `2.0.2.dev1217+g017bece06` (branch `orig-hires-fixes`).
+
+#### Headline
+
+**68 of 370 order-spectra are rejected (18.4%), not one.** Phase 1's "one
+known-bad order-spectrum" is a substantial understatement, and the reason it
+was missed is instructive: order 60 of `HI.19980719.49996` was found by chasing
+an anomalous S/N *minimum*, and the other failures do not depress the S/N
+minimum at all.
+
+**All of the damage is in the iodine region.** Orders 78–89 (3977–4603 Å) are
+clean in all ten epochs; every rejection falls in orders 57–77, 4597–6262 Å.
+
+| window | usable | rejected |
+|---|---|---|
+| blue, < 5000 Å — phase 2 cross-correlation | 204 / 220 | 7% |
+| iodine, > 5000 Å — phase 3 forward model | 98 / 150 | **35%** |
+
+Phase 2 is barely affected. Phase 3 loses a third of the region it cannot do
+without. That inversion was not visible before this ran.
+
+#### Two failure modes, and why the tests must be sequential
+
+Phase 1 framed this as one statistic. It is two, and they are independent.
+
+**Mode 1 — PypeIt rejected the pixels.** `OPT_MASK` collapses to near-zero
+while the flux and inverse variance are healthy. `HI.19980718.49487` order 59
+has `OPT_MASK` true for **10 of 2048** pixels, yet 2040 pixels have positive
+inverse variance and a median of 18,208 counts. The driver is `OPT_FRAC_USE`,
+the fraction of the object profile landing on usable slit pixels: 0.428 there
+against 0.997 in a clean frame. Across the dataset the masked orders have
+median FWHM 2.28 px and FRAC_USE 0.850; the unmasked ones 1.90 px and 0.988.
+Poor seeing widens the profile, it spills past the aperture, and PypeIt throws
+the order away. **57 order-spectra**, in six of the ten frames.
+
+Phase 1 wrote `redux/checks/frac_use_stats.py` and never drew a conclusion from
+it. The conclusion is that this is the *dominant* quality problem in the
+dataset, four times more common than the extraction faults.
+
+**Mode 2 — the extraction silently lost the object.** Order 60 of
+`HI.19980719.49996` has `OPT_MASK` true for 2026 of 2048 pixels and
+`OPT_FRAC_USE` exactly 1.000. Nothing internal to that order says it is wrong.
+Only its neighbours do. **11 order-spectra** flagged, of which 8 confirmed.
+
+Running one test explains why the order matters: computing the smoothness
+statistic on all valid pixels — including the ones PypeIt rejected — measures
+how much of each order the mask discarded, not whether the extraction worked.
+Done that way it flags 78 order-spectra and buries the real faults. The tests
+are therefore applied in sequence: reject the mask-collapsed orders first, then
+test the smoothness of what survives, using only surviving orders as
+neighbours.
+
+#### The adjacent-order diagnostic, and the false positive it would have caused
+
+For each frame, a leave-one-out local linear fit to the six neighbouring orders
+(±3) predicts each order's log S/N; the residual measures the departure from
+its own frame's blaze trend. The order is excluded from its own fit, so a bad
+order cannot drag its prediction towards itself and hide.
+
+**That residual is not noise, and taking it at face value produces a textbook
+false positive.** Order 89 sits at +0.062 dex in *every one of the ten epochs* —
+the free spectral range steps there, and a local linear fit cannot follow it.
+Against the raw scatter that is +60σ, so a naive threshold flags order 89 ten
+times out of ten. Orders 88, 87 and 92 do the same at +0.042, +0.023, +0.021
+dex. These are properties of the echelle format, not faults, so the per-order
+median residual across epochs is subtracted before anything is flagged.
+
+**The threshold is not a sigma cut, because a sigma cut is meaningless here.**
+After de-trending, the residuals are sharply bimodal: 95% of order-spectra lie
+below 0.005 dex, the worst healthy one reaches 0.015, and then the distribution
+jumps — 0.035, 0.060, 0.070, 0.078, 0.089, 0.096, 0.113, 0.180, 0.198, 0.342,
+0.741. The robust σ is 0.0010 dex, which would put the worst order at 700σ and
+every order above the noise floor "significant". **0.02 dex** — a 5% departure
+from the local blaze trend — sits in the middle of the gap and is what the
+filter uses.
+
+#### The eleven anomalies, adjudicated
+
+The verification test shares no machinery with the flagging test: it never
+looks at a neighbouring order, only at the same order in the other nine frames,
+after dividing out each frame's overall S/N level measured on a set of
+reference orders common to all epochs.
+
+| epoch | order | S/N | residual | cross-epoch | verdict |
+|---|---|---|---|---|---|
+| `HI.19980719.49996` | 60 | 10.7 | −0.741 | 0.062 | confirmed |
+| `HI.19980719.49996` | 59 | 67.6 | +0.342 | 0.387 | confirmed |
+| `HI.19980718.49487` | 93 | 27.3 | −0.198 | 0.612 | confirmed |
+| `HI.19980719.49996` | 61 | 68.6 | +0.180 | 0.396 | confirmed |
+| `HI.19980718.49487` | 92 | 52.0 | +0.112 | 0.972 | **not confirmed** |
+| `HI.19980719.49996` | 63 | 71.5 | +0.096 | 0.426 | confirmed |
+| `HI.19980719.49996` | 65 | 76.7 | −0.089 | 0.467 | confirmed |
+| `HI.19980719.49996` | 62 | 61.8 | +0.078 | 0.362 | confirmed |
+| `HI.19980719.49996` | 58 | 42.3 | +0.070 | 0.241 | confirmed |
+| `HI.19980718.49487` | 91 | 57.4 | +0.060 | 0.978 | **not confirmed** |
+| `HI.19980718.49487` | 90 | 65.3 | +0.035 | 0.986 | **not confirmed** |
+
+**Yes, there are false positives: three of eleven, and they have a single
+explanation.** All three are orders 90, 91 and 92 of `HI.19980718.49487`, and
+order 93 of that same frame is a confirmed fault. They sit 1, 2 and 3 orders
+away — inside the ±3 neighbourhood. A broken order is a neighbour of the orders
+either side of it and drags their predictions with it. The script checks this
+explicitly and reports that every unconfirmed flag lies within the
+neighbourhood of a confirmed one.
+
+Iterating — barring the first pass's outliers from the second pass's
+neighbourhoods — was tried and is **wrong here**, and the failure is worth
+recording. In `HI.19980719.49996` the entire red block is damaged, so the
+second pass strips away every neighbour order 60 has, its residual becomes
+undefined, and *the one fault phase 1 found by hand stops being flagged at
+all*. The filter therefore makes a single pass, over-flags in the safe
+direction, and lets the independent cross-epoch test adjudicate. Three
+conservative false positives on three good orders of an already-damaged frame
+is a much better trade than losing the worst order in the dataset.
+
+#### What the confirmed faults actually are
+
+`HI.19980719.49996` is not "one bad order". Its red block reads 42, 68, **11**,
+69, 62, 72, —, 77 across orders 58–65 where the other frames run 150–170 and
+vary by 2% between neighbours. Seven of its orders are confirmed anomalous and
+nine more are mask-collapsed: **16 of 37 rejected**. It is the last frame of
+the night, 13:53 UT at airmass 1.52. Atmospheric extinction is smooth in
+wavelength and cannot produce order-to-order jaggedness of this size, so this
+is the extraction failing, not the sky — consistent with phase 1's guess that
+the trace lost the star, but across a whole block rather than one order.
+
+`HI.19980718.49487` order 93 — S/N 27.3 against 40–52 for that order elsewhere
+— is a **second, previously unknown** extraction fault, at the far blue end,
+inside phase 2's cross-correlation window.
+
+#### Per-epoch summary
+
+| epoch | adjacent-order scatter | rejected |
+|---|---|---|
+| `HI.19980715.38054` | 1.81% | 0 |
+| `HI.19980716.52985` | 2.28% | 4 |
+| `HI.19980717.32194` | 2.54% | 3 |
+| `HI.19980717.48747` | 5.14% | 16 |
+| `HI.19980718.29255` | 1.76% | 0 |
+| `HI.19980718.38646` | 2.13% | 7 |
+| `HI.19980718.49487` | 5.60% | 22 |
+| `HI.19980719.24897` | 1.49% | 0 |
+| `HI.19980719.35708` | 1.38% | 0 |
+| `HI.19980719.49996` | 7.37% | 16 |
+
+Four epochs are perfect. The frame-level scatter reproduces phase 1's
+diagnostic closely — 7.37% for `HI.19980719.49996` against 1.49% and 1.38% for
+the other two frames of that night, where phase 1 quoted 6.2% against 1.8–2.0%.
+Phase 1's calculation was never written to disk, so the small difference cannot
+be traced; the separation is the same and the conclusion is identical.
+
+Note that `HI.19980717.48747` and `HI.19980718.49487` sit at 5.1% and 5.6% —
+between the clean frames and the known-bad one. Phase 1 saw only the 6.2%
+outlier and reported the run as having a single blemish. The frame-level
+statistic did carry the warning; it was not read.
+
+#### What phase 2 should do with this
+
+1. **`order_quality.csv` is the filter.** Booleans are written as 0/1 rather
+   than `True`/`False`, because `ascii.csv` round-trips Python booleans as
+   strings that evaluate truthy on read — the prompt-8 adapter can consume the
+   `use` column directly.
+2. **Prompt 5's cross-correlation loses almost nothing**: 204 of 220 blue
+   order-spectra survive, and orders 78–89 are clean in every epoch.
+3. **Prompt 3 should expect this to recur.** Six of ten frames have
+   mask-collapsed orders and the driver is seeing, not the recipe. Over a
+   nine-month baseline and a change of decker it will be worse, not better.
+   Worth testing during prompt 3 whether relaxing PypeIt's `FRAC_USE`
+   threshold, or widening the extraction aperture, recovers the red orders —
+   the flux is demonstrably there.
+4. **Phase 3's real constraint is now visible.** 35% of the iodine region is
+   unusable as reduced, and three epochs retain 2, 2 and 3 usable orders of 15.
+   A forward model has nothing to work with on those nights. This should go
+   into the prompt-9 assessment as a phase-3 requirement, and it strengthens
+   the case for reducing the additional nights in prompt 3.
+
+
 ## Logs
 
 ### 2026-09-22 (Prompt 1: settled the reference frame — and found a sign error in PypeIt's heliocentric correction)
@@ -524,3 +711,83 @@ flux-weighted midpoint, and `bary_vel_corr` in **m/s**.
 
 **Nothing was changed** in the reductions, the pypeit files, or PypeIt itself,
 as the prompt directed.
+
+### 2026-09-22 (Prompt 2: the quality filter — 68 bad order-spectra, not one, and all of them in the iodine region)
+
+**Task.** Prompt 2 of this document: write the quality filter as a script on
+disk, compute the adjacent-order S/N scatter diagnostic that isolated order 60
+of `HI.19980719.49996` over every order of the five reduced nights, emit a
+per-epoch per-order quality table, and report how many orders it flags and
+whether any flag is a false positive. Full findings are in the Report section
+above.
+
+**What was done.**
+
+- Wrote `first_hires_exoplanet/quality_filter.py`, which reads all 370
+  order-spectra, applies three tests in sequence (mask survival, absolute S/N
+  floor, adjacent-order smoothness), de-trends the smoothness residual against
+  the echelle format, adjudicates every flag with an independent cross-epoch
+  test, and writes `first_hires_exoplanet/data/order_quality.csv`.
+- Reproduced phase 1's frame-level statistic for continuity: 7.37% for
+  `HI.19980719.49996` against 1.49%/1.38% for the other two frames of that
+  night (phase 1 quoted 6.2% against 1.8–2.0%).
+
+**Headline results.** 68 of 370 order-spectra rejected, 18.4%. Every rejection
+falls in orders 57–77 (4597–6262 Å); orders 78–89 are clean in all ten epochs.
+The blue window phase 2 cross-correlates over keeps 204 of 220; the iodine
+region phase 3 needs keeps only 98 of 150. Eleven orders flagged by the
+adjacent-order statistic, **eight confirmed and three false positives**, all
+three of them neighbours of a genuinely bad order in the same frame.
+
+**What this taught us about the repository and the data.**
+
+- **Phase 1's "one known-bad order-spectrum" is wrong, and the error was
+  methodological.** Order 60 was found by chasing an anomalous S/N *minimum*.
+  The dominant failure mode — `OPT_MASK` collapsing while the flux is healthy —
+  does not move the S/N minimum, so it was invisible to that search. Anything
+  found by following up a single summary statistic should be assumed to be the
+  tip of something.
+- **The dominant defect is `OPT_FRAC_USE`, and phase 1 had the tool but not the
+  conclusion.** `redux/checks/frac_use_stats.py` exists and was never turned
+  into a claim. 57 of the 68 rejections are mask collapse driven by the object
+  profile spilling past the extraction aperture in poor seeing (masked orders:
+  median FWHM 2.28 px, FRAC_USE 0.850; unmasked: 1.90 px, 0.988). This is a
+  *recipe* question, not a data question — the flux is still in the frame, with
+  18,208 counts sitting under a mask that kept 10 pixels of 2048. Prompt 3
+  should test whether the aperture or the threshold can be widened.
+- **The order numbering runs blue-to-red backwards from intuition.** Order 93
+  is 3806 Å and order 57 is 6262 Å. Getting this the wrong way round inverts
+  the central conclusion — "the damage is in the blue" versus "the damage is in
+  the iodine region" — and the two lead to opposite decisions about phase 3.
+  Worth stating explicitly in anything that quotes order numbers.
+- **The echelle format masquerades as a defect.** Order 89 departs from a local
+  linear fit by +0.062 dex in every single epoch, which is +60σ against the raw
+  scatter. Any per-order outlier statistic on these data must be de-trended
+  against the format before it is thresholded, or it will confidently report
+  the same ten false positives every time.
+- **A sigma cut is the wrong tool for this distribution.** After de-trending,
+  the residuals are bimodal with a clean gap between 0.015 and 0.035 dex, and
+  the robust σ is 0.0010 dex. Thresholding on the physical quantity — a 5%
+  departure from the local blaze trend — is defensible; thresholding on σ would
+  have flagged everything above the noise floor.
+- **Iterative outlier rejection can destroy the signal it is meant to find.**
+  Barring pass-one outliers from pass-two neighbourhoods is the standard move
+  and it silently un-flagged order 60 of `HI.19980719.49996`, because in that
+  frame the whole red block is damaged and there were no clean neighbours left.
+  The single pass over-flags by three and keeps the one fault we already knew
+  was real. Recorded in the code so it is not "fixed" later.
+- **Two more compromised frames were hiding in plain sight.**
+  `HI.19980717.48747` and `HI.19980718.49487` sit at 5.1% and 5.6%
+  frame-level scatter, between the clean frames (1.4–2.5%) and the known-bad
+  one (7.4%). Phase 1 computed the same statistic, saw the largest value, and
+  did not look at the ranking.
+- **`ascii.csv` does not round-trip booleans.** They come back as the strings
+  `'True'`/`'False'`, both truthy. The quality table writes flags as 0/1. Worth
+  applying to every table this project commits.
+
+**Files added.**
+
+- `first_hires_exoplanet/quality_filter.py`
+- `first_hires_exoplanet/data/order_quality.csv`
+
+**Nothing was changed** in the reductions or in PypeIt.
