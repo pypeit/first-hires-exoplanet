@@ -628,6 +628,180 @@ statistic did carry the warning; it was not read.
    the case for reducing the additional nights in prompt 3.
 
 
+### Prompt 3: extending the reduction across the discovery era
+
+**20 of 20 nights reduced, 36 science frames**, every one into 37 echelle
+orders (57-93) covering 3806-6262 A. Reproduced by:
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.calib_inventory
+conda run -n pypeit14 python -m first_hires_exoplanet.order_shift
+conda run -n pypeit14 python -m first_hires_exoplanet.koa_download --night ...
+conda run -n pypeit14 python -m first_hires_exoplanet.reduce_run --era
+```
+
+696 MB of raw frames and 9.8 GB of reductions, all in the sibling data tree.
+Summary in `redux/run_summary.json`.
+
+#### Does the phase-1 recipe hold over nine months? Yes.
+
+`find_trim_edge = 1,1`, `skip_skysub = True`, `no_local_sky = True` were not
+changed for any night. Every night returned **37 orders** except one, and the
+wavelength-solution RMS stayed inside the same 0.05-0.24 px band it occupied in
+July. Median S/N per night runs 76-182, tracking exposure time and conditions.
+
+#### Does it survive the change of decker? Yes -- but the decker was never the problem.
+
+**1998-09-17 reduced through B2 with the phase-1 parameters untouched**:
+37 orders, median S/N 136.9, RMS 0.062 / 0.117 / 0.229, indistinguishable from
+the B1 nights. `find_trim_edge = 1,1` was set in phase 1 because the B1 orders
+are only ~10.3 binned pixels wide; on the wider B2 slit it is simply permissive
+and does no harm.
+
+What 09-17 actually lacked was an **arc**. It took no B2 ThAr, and only three
+B2 arcs exist in the entire discovery era (1998-07-14, 09-14, 09-15). It
+borrows 1998-09-15's -- 10 s, d echangle 0.0004 -- exactly as 1998-07-19
+borrows 07-18's.
+
+#### The calibration problem, which is the real content of this prompt
+
+Phase 1 borrowed flats from 1998-07-14 because the July run had none of its own.
+That was not a quirk of July. **Clean B1 flats exist on only five of the
+twenty-one discovery-era nights** -- 07-14 (4), 08-12 (18), 08-17 (2), 09-17
+(10), 09-18 (8) -- because this program flat-fielded through the wider **B2**
+decker as a matter of course while observing through B1. Sixteen nights have
+clean B2 flats; most have no usable B1 flat at all.
+
+PypeIt only accepts a flat whose echelle angle is within ~0.01 of the science
+frame, and the era spans 0.021, so there is no single flat set for the whole
+run. **1998-08-12, with eighteen B1 flats near the middle of the era, is the
+calibration keystone for the entire August-September block.** Until this prompt
+it was noted only as the cell-in/cell-out diagnostic pair for prompt 7.
+
+The rule adopted, applied uniformly: a night uses its own clean flats of its own
+decker when it has at least four; otherwise it borrows four from 1998-08-12.
+
+#### Four traps, each of which broke the reduction before it was found
+
+**1. Five of 1998-08-12's eighteen B1 flats are empty frames.** KOA records
+them as `flatlamp`, iodine out, hatch closed -- a perfect clean flat by every
+column of the survey. The cross-disperser cover (`XCOVOPEN`) was shut: they hold
+bias and read noise, **mean 768 counts with a standard deviation of 1.4**,
+against 17,400 and 12,000 for a real one. The "four flats nearest in time to
+the science frames" rule selected exactly those four, PypeIt silently declined
+to frametype them, and three nights died several minutes later with `No frames
+of type=trace provided`, which says nothing whatever about the cause.
+**Calibrations cannot be chosen from archive metadata alone.**
+
+**2. The signal test has to be the level, not the scatter.** The obvious
+discriminator is spatial structure -- a real B1 flat has bright orders against
+dark gaps and reaches `IM01SD01` = 4,300-12,400 where an unlit frame gives 1.4.
+But it is decker-dependent: the wider B2 slit fills the frame far more evenly
+and its perfectly good flats sit at **149-171**. A scatter threshold calibrated
+on B1 throws every B2 flat away. The test is now on `IM01MN01` -- 6,700-20,400
+for a lit flat against 763-768 for the bias.
+
+**3. `TARGNAME = 'H187123'` on 1998-08-12.** A one-character typo by the
+observer in 1998. KOA's own `targname` column normalises it to `187123`, so the
+archive survey and the downloader both find the frames, and only a reader of the
+raw FITS header sees it. An exact-equality test gave that night zero science
+frames and it was skipped in silence -- the one night that is both the flat
+donor for half the era and prompt 7's diagnostic pair. Matched as a substring
+now. (The same header shows the cell-out frame labelled `OBJECT = 'Template'`:
+the observer was deliberately taking a template.)
+
+**4. December 1997 is a different cross-disperser, as far as PypeIt is
+concerned.** `keck_hires.py:245` overrides the header's `XDISPERS = 'RED'` to
+`RED97` for every frame before 1997-12-31, on the MAKEE DRP's claim that a
+different cross-disperser was fitted. `dispname` is a hard configuration key
+with **no tolerance**, so no 1998 frame can ever join a 1997 configuration. The
+echelle-angle gap was never the binding constraint.
+
+#### December 1997, and how far the orders actually move
+
+1997-12-23 and 12-24 failed outright at first. The question of whether a flat
+from another night could be forced in was settled by measurement rather than by
+PypeIt's tolerance, in `order_shift.py`: collapse each night's B1 ThAr arc along
+dispersion and cross-correlate the spatial order profile against 1998-07-14's.
+
+| night | d echangle | shift | correlation | PypeIt accepts? |
+|---|---|---|---|---|
+| **1997-12-23** | +0.01387 | **-1 px** | 0.986 | **no** |
+| **1997-12-24** | +0.01488 | **-1 px** | 0.994 | **no** |
+| 1998-07-17 | -0.00021 | -3 px | 0.989 | yes |
+| 1998-07-18 | -0.00025 | -3 px | 0.985 | yes |
+| 1998-08-25 | -0.00512 | -2 px | 0.990 | yes |
+
+**The December nights are better aligned with the July flats than several
+nights PypeIt accepts without complaint.** The cross-disperser angle, which is
+what sets spatial position, barely moved (d xdangle 0.0025 and 0.0010). The
+0.01 echelle tolerance is a proxy for "same instrument setup" and is
+conservative here.
+
+That established the geometry, but the `RED97` barrier still rules out any 1998
+donor, so December is calibrated **entirely from its own night**. The only B1
+quartz flat it has is hatch-closed, cover-open and **iodine-in**, at exactly
+the science echelle angle. That is the right frame to trace with: the cell
+modulates the spectrum along dispersion without moving the orders.
+
+What an iodine-in flat must never do is flat-field the science, because
+dividing it into iodine-in science would partly cancel the 5000-6200 A
+absorption phase 3 measures velocities from. The intention was to keep the
+illumination correction and drop only the pixel flat; **PypeIt forbids that
+combination** (`pypeitpar.py:575` validates that a slit-illumination or spectral
+flat-field correction is only applied alongside the pixel flat). So both are
+off, and the flat serves **tracing only**.
+
+It works. 1997-12-23 and 12-24 both reduce to 37 orders, median S/N 138.2 and
+161.6, RMS 0.067 / 0.121 / 0.208 and 0.070 / 0.121 / 0.221 -- indistinguishable
+from the 1998 nights despite `RED97` and trace-only flat-fielding.
+
+**These two nights are nonetheless flat-fielded differently from the other
+eighteen**, with no pixel-flat (phase 1 measured it at +/-3%) and no
+slit-illumination correction. Both are smooth and multiplicative, so neither
+moves a line centre and neither biases a velocity, but anything comparing
+December against the rest must know it. The forcing is expressed in
+`FORCED_CALIBS` and `DECEMBER_PARAMS` in `reduce_run.py`, not by hand-editing a
+`.pypeit` file.
+
+#### Which nights reduce cleanly, and which needed intervention
+
+**Clean, no intervention (16 nights, 31 frames):** 1998-06-18, 07-15, 07-16,
+07-17, 07-18, 08-12, 08-17, 08-18, 08-25, 08-26, 09-12, 09-14, 09-15, 09-16,
+09-18 -- and of these, eleven borrowed 1998-08-12's flats, which is routine
+rather than intervention.
+
+**Needed intervention (4 nights, 5 frames):**
+
+| night | intervention |
+|---|---|
+| 1998-07-19 | borrows the 07-18 arc (phase 1) |
+| 1998-09-17 | borrows the 1998-09-15 **B2** arc; only three B2 arcs exist in the era |
+| 1997-12-23 | own iodine-in B1 flat forced as trace; pixel and illumination flats off |
+| 1997-12-24 | as 12-23 |
+
+#### Two anomalies for the quality filter
+
+- **1998-09-13** is the one night that did not return 37 orders: **34 orders,
+  35 wavelength solutions, worst-order RMS 0.477 px** against ~0.22 everywhere
+  else. It should be looked at before it feeds prompt 5.
+- **1998-09-17** has an S/N minimum of **13.7**, the signature of a single
+  collapsed order -- exactly what prompt 2's filter is built to catch.
+- 1998-08-12's low median S/N (76.4, 91.3) is not an anomaly: those are 60 s
+  exposures against 200-500 s elsewhere.
+
+`quality_filter.py` was written in prompt 2 against the five July nights and
+should now be re-run over all twenty; it reads whatever reductions it finds.
+
+#### What this gives the later prompts
+
+- **Prompt 4** has its template: the three cell-out exposures of 1998-08-26 came
+  out at median S/N **180.6, 181.4, 178.4**, the highest of the whole era, plus
+  the 1997-12-24 cell-out frame at 161.6 for the consistency check.
+- **Prompt 5** has 36 epochs over nine months instead of 10 over five nights.
+- **Prompt 7** has the 1998-08-12 cell-in/cell-out pair, both reduced.
+
+
 ## Logs
 
 ### 2026-09-22 (Prompt 1: settled the reference frame — and found a sign error in PypeIt's heliocentric correction)
@@ -791,3 +965,88 @@ three of them neighbours of a genuinely bad order in the same frame.
 - `first_hires_exoplanet/data/order_quality.csv`
 
 **Nothing was changed** in the reductions or in PypeIt.
+
+### 2026-09-22 (Prompt 3: the whole discovery era reduced -- 20 nights, 36 frames -- after four calibration traps)
+
+**Task.** Prompt 3 of this document: extend the reduction to the rest of the
+discovery era, reusing `reduce_run.py`; report which nights reduce cleanly,
+which need intervention, and whether the phase-1 recipe holds across nine months
+and a change of decker. Full findings are in the Report section above.
+
+**What was done.**
+
+- Wrote `first_hires_exoplanet/calib_inventory.py`: per-night inventory of what
+  calibrations exist in the planet-search configuration, decker-aware, plus a
+  check of the flats actually on disk against what the archive claims.
+- Wrote `first_hires_exoplanet/order_shift.py`: measures the spatial order shift
+  between nights by cross-correlating collapsed B1 arc profiles, which is what
+  decided the December question.
+- Extended `koa_download.py` with the fifteen new nights, and `reduce_run.py`
+  with per-night flat selection, forced frametypes and per-night parameters.
+- Downloaded 696 MB of raw frames; produced 9.8 GB of reductions.
+
+**Headline results.** 20 of 20 nights, 36 science frames, 37 orders each,
+wavelength RMS in the same 0.05-0.24 px band as July. The recipe held unchanged
+across nine months and across the B1-to-B2 decker change. Four nights needed
+intervention: 07-19 and 09-17 borrow arcs, 12-23 and 12-24 are traced from their
+own iodine-in flat with pixel and illumination flatting switched off.
+
+**What this taught us about the repository and the data.**
+
+- **Phase 1's flat problem was the general case, not a quirk of July.** Clean B1
+  flats exist on only five of twenty-one nights; this program flat-fielded
+  through B2 while observing through B1. 1998-08-12, previously noted only as
+  the cell-in/cell-out pair for prompt 7, turns out to be the calibration
+  keystone for the whole August-September block.
+- **Archive metadata is not enough to choose calibrations.** Five of 08-12's
+  eighteen B1 "flats" are clean by every KOA column and contain nothing but
+  bias -- the cross-disperser cover was shut. They are distinguishable only from
+  the pixel statistics, and PypeIt's downstream error (`No frames of type=trace
+  provided`) points nowhere near the cause. Any future calibration selection in
+  this project should verify the frames, not just the table.
+- **A discriminator calibrated on one decker can be wrong on another.** The
+  first version of that check tested spatial scatter, which separates lit from
+  unlit B1 flats by four orders of magnitude -- and throws away every B2 flat,
+  because the wide slit fills the frame evenly (sigma 149-171). Testing the
+  level instead works for both.
+- **Exact string matches on observer-typed header cards are fragile.**
+  `TARGNAME = 'H187123'` on 1998-08-12 -- one stray character in 1998 -- silently
+  removed the most important night in the era from the reduction. KOA's
+  normalised `targname` hides it, so the survey and the downloader both work and
+  only the raw header reveals it.
+- **`dispname` is a hard configuration key and PypeIt rewrites it by date.**
+  `keck_hires.py:245` turns `XDISPERS = 'RED'` into `RED97` for everything before
+  1997-12-31 on the MAKEE DRP's authority. No 1998 calibration can ever reach a
+  1997 night. This was the binding constraint on December, not the echelle angle
+  we spent time measuring -- though that measurement was still worth having.
+- **PypeIt's configuration tolerances are conservative, and that is now
+  quantified.** The December nights sit 1 binned pixel from the July flats at
+  correlation 0.99, closer than 1998-07-17 and 07-18 which PypeIt accepts at
+  -3 px. `order_shift.py` is the general tool for asking this question of any
+  future night.
+- **PypeIt will not let you apply an illumination flat without a pixel flat**
+  (`pypeitpar.py:575`). The plan for December was to keep the illumination
+  correction and drop only the pixel flat, to keep the iodine-in flat's I2 out
+  of the science frames; that combination is rejected outright, so both had to
+  go and the flat serves tracing only.
+- **A per-night try/except is essential in a twenty-night driver.** The first
+  run aborted the whole loop on the first failure. It also exposed a formatting
+  bug -- `'{:s}'.format(exc)` raises on an exception object -- which hid the real
+  error behind a `TypeError`.
+- **Two anomalies to carry forward:** 1998-09-13 returned 34 orders and a
+  worst-order RMS of 0.477 px, and 1998-09-17 has an S/N minimum of 13.7.
+  `quality_filter.py` from prompt 2 should now be re-run over all twenty nights.
+
+**Files added.**
+
+- `first_hires_exoplanet/calib_inventory.py`
+- `first_hires_exoplanet/order_shift.py`
+
+**Files modified.** `first_hires_exoplanet/koa_download.py` (fifteen new nights,
+the 09-17 B2 arc, the December trace flats, `xcovopen` in the flat selection);
+`first_hires_exoplanet/reduce_run.py` (the era nights, header-driven frame
+classification, per-night flat selection with the donor rule, forced frametypes
+and parameters for December, per-night error handling, decker in the summary).
+
+**No git command changed state, and no raw frame or reduction product is in the
+repository.**

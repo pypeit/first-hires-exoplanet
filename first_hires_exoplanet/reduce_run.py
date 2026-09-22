@@ -38,9 +38,12 @@ The rule used here, applied uniformly:
     four of them;
   * otherwise it borrows **1998-08-12**'s B1 flats, which are legal for every
     B1 night of 1998 and sit closest to the middle of the era;
-  * exactly **four** flats are used everywhere, the four nearest in time to the
-    night's science frames, so the recipe does not vary with how many flats a
-    night happened to take;
+  * a **borrowed** flat set is capped at four, the four nearest in time to the
+    night's science frames, so a borrowing night's recipe does not depend on
+    how many flats the donor happened to take.  A night using its own flats
+    stages all of them: its whole raw directory is staged, and the download
+    selection already restricts that directory to science frames, arcs and
+    clean flats;
   * **1997-12-23 and 1997-12-24 have no legal donor at all.**  Their echelle
     angles (+0.0149, +0.0160) are more than 0.01 from every clean B1 flat in
     the era.  They are attempted anyway, and what happens is the answer to
@@ -131,11 +134,69 @@ DONOR_NIGHT = '19980812'
 #: How many flats every reduction uses, so the recipe does not vary
 N_FLATS = 4
 
-#: A real quartz flat has structure across the frame -- the illuminated orders
-#: against the gaps between them.  An unlit frame has none.  The good B1 flats
-#: of this era sit at IM01SD01 = 4,300-12,400 and the unlit ones at 1.3-1.5, so
-#: anything above a few hundred counts of structure is unambiguous.
-MIN_FLAT_SIGMA = 200.
+#: Nights whose flats must be forced into the generated `.pypeit` file, with
+#: the frametype to force.  Only December 1997 needs this.
+#:
+#: Two independent things stop PypeIt calibrating those nights on its own.  The
+#: echelle angle (+0.0149, +0.0160) is outside the 0.01 grouping tolerance of
+#: every clean B1 flat in the era; and, decisively, `dispname` is a hard config
+#: key with no tolerance, and `keck_hires.py` overrides the header's
+#: `XDISPERS = 'RED'` to `RED97` for everything before 1997-12-31, on the MAKEE
+#: DRP's claim that a different cross-disperser was fitted.  No 1998 frame can
+#: ever join a 1997 configuration.
+#:
+#: So December is calibrated entirely from its own night.  The only B1 quartz
+#: flat it has is hatch-closed, cover-open and **iodine-in**, at exactly the
+#: science echelle angle.  That is the right frame to trace with -- the cell
+#: modulates the spectrum along dispersion without moving the orders -- and
+#: `order_shift.py` confirms the geometry independently: the December arcs sit
+#: 1 binned pixel from 1998-07-14's, at correlation 0.986 and 0.994, closer
+#: than several nights PypeIt accepts without complaint.
+#:
+#: What an iodine-in flat must NOT do is serve as a pixel flat: its I2 forest
+#: would be divided out of the science frames between 5000 and 6200 A, which is
+#: exactly the signal phase 3 depends on.  `DECEMBER_PARAMS` therefore switches
+#: pixel-flatting off for these two nights.  The illumination flat is a smooth
+#: fit along the slit and the narrow I2 lines do not survive it, so that stays.
+FORCED_CALIBS = {
+    '19971223': {'HI.19971223.15114.fits': 'pixelflat,illumflat,trace'},
+    '19971224': {'HI.19971224.14230.fits': 'pixelflat,illumflat,trace'},
+}
+
+#: Extra parameters for the December nights (see FORCED_CALIBS)
+DECEMBER_PARAMS = """[scienceframe]
+    [[process]]
+        # The only B1 flat these nights have was taken with the iodine cell in.
+        # It traces the orders correctly, but its I2 forest must never reach the
+        # science frames: dividing an iodine-in flat into iodine-in science
+        # would partly cancel the 5000-6200 A absorption that phase 3 measures
+        # velocities from.  So the flat is used for tracing only.
+        #
+        # Both corrections have to go together.  PypeIt validates that a
+        # slit-illumination or spectral flat-field correction is only applied
+        # alongside the pixel flat (pypeitpar.py:575), so use_illumflat = True
+        # with use_pixelflat = False is rejected outright.
+        #
+        # The cost is the pixel-to-pixel correction, which phase 1 measured at
+        # +/-3%, and the slit-illumination correction.  Both are smooth and
+        # multiplicative; neither moves a line centre, so neither biases a
+        # velocity.  These two nights are nonetheless flat-fielded differently
+        # from the other eighteen and must be treated as such.
+        use_pixelflat = False
+        use_illumflat = False
+"""
+
+#: A lit quartz flat is far above the bias level; an unlit one is not.  The
+#: clean flats of this era sit at IM01MN01 = 6,700-20,400 and the unlit ones at
+#: 763-768, which is the bias.
+#:
+#: Test the LEVEL, not the spatial scatter.  Scatter looks like the obvious
+#: discriminator -- a real B1 flat has bright orders against dark gaps and
+#: reaches IM01SD01 = 4,300-12,400 where an unlit frame gives 1.4 -- but it is
+#: decker-dependent: the wider B2 slit fills the frame far more evenly and its
+#: perfectly good flats sit at 149-171.  A scatter threshold set on B1 throws
+#: every B2 flat away.
+MIN_FLAT_LEVEL = 3000.
 
 #: The prompt-8 parameter block, injected before the `# Setup` section
 PARAM_BLOCK = """[reduce]
@@ -211,7 +272,7 @@ def frame_roles(raw_dir):
             # PypeIt silently declines to frametype them, and the reduction
             # dies much later with "No frames of type=trace provided".
             lit = (hdr.get('XCOVOPEN')
-                   and float(hdr.get('IM01SD01', 0.)) > MIN_FLAT_SIGMA)
+                   and float(hdr.get('IM01MN01', 0.)) > MIN_FLAT_LEVEL)
             clean = ((not hdr.get('HATOPEN')) and (not hdr.get('IODIN'))
                      and lit)
             role = 'flat' if clean else 'flat_dirty'
@@ -241,6 +302,14 @@ def choose_flats(night):
 
     def nearest(cands):
         return sorted(cands, key=lambda f: min(abs(f['mjd'] - a) for a in anchors))
+
+    if night in FORCED_CALIBS:
+        forced = [os.path.join(RAW_ROOT, subdir, b) for b in FORCED_CALIBS[night]]
+        missing = [f for f in forced if not os.path.isfile(f)]
+        if missing:
+            raise RuntimeError('Missing forced calibration: {:s}'.format(
+                ', '.join(missing)))
+        return forced, '{:s} own {:s}, iodine-in, forced as trace'.format(night, deck)
 
     mine = [f for f in own if f['role'] == 'flat' and f['decker'] == deck]
     if len(mine) >= N_FLATS:
@@ -367,6 +436,45 @@ def inject_params(pypeit_file):
         fh.write(text.replace(marker, '\n' + PARAM_BLOCK + marker, 1))
 
 
+def force_frametypes(pypeit_file, forced):
+    """ Set an explicit frametype on frames `pypeit_setup` left untyped.
+
+    `pypeit_setup` writes every staged frame into the data block but comments
+    out, and gives `frametype = None` to, anything it could not classify.  An
+    iodine-in quartz flat is one of those.  The frametype column is
+    authoritative at `run_pypeit` time, so writing it here is enough.
+
+    Args:
+        pypeit_file (str): the generated file, modified in place.
+        forced (dict): basename -> frametype string.
+
+    Returns:
+        list: basenames that were found and rewritten.
+    """
+    with open(pypeit_file) as fh:
+        lines = fh.read().split('\n')
+
+    done = []
+    for i, line in enumerate(lines):
+        bare = line.lstrip('#').strip()
+        for base, ftype in forced.items():
+            if not bare.startswith(base):
+                continue
+            fields = bare.split('|')
+            fields[0] = base
+            fields[1] = ftype
+            fields[-1] = '0'
+            lines[i] = ' ' + ' | '.join(f.strip() for f in fields)
+            done.append(base)
+    if len(done) != len(forced):
+        raise RuntimeError('Could not find {:s} in {:s}'.format(
+            ', '.join(set(forced) - set(done)), pypeit_file))
+
+    with open(pypeit_file, 'w') as fh:
+        fh.write('\n'.join(lines))
+    return done
+
+
 def reduce_night(night, overwrite=False):
     """ Stage, set up and reduce one night.
 
@@ -393,6 +501,14 @@ def reduce_night(night, overwrite=False):
     dst = os.path.join(redux_dir, os.path.basename(src))
     shutil.copy(src, dst)
     inject_params(dst)
+    if night in FORCED_CALIBS:
+        forced = force_frametypes(dst, FORCED_CALIBS[night])
+        print('  forced frametypes: {:s}'.format(', '.join(forced)))
+        with open(dst) as fh:
+            text = fh.read()
+        with open(dst, 'w') as fh:
+            fh.write(text.replace('\n# Setup\n',
+                                  '\n' + DECEMBER_PARAMS + '# Setup\n', 1))
 
     # A reduction must describe exactly one pass: run_pypeit -o appends to an
     # existing spec1d instead of replacing it (see the prompt-9 log).
