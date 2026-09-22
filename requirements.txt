@@ -1,0 +1,13 @@
+numpy
+scipy
+matplotlib
+astropy
+pandas
+tqdm
+IPython
+pytest
+
+# PypeIt is the core reduction engine.  It is developed locally at
+# /Users/xavier/Projects/PypeIt/PypeIt; install that checkout with `pip install -e .`
+# rather than taking the PyPI release, so fixes land here immediately.
+pypeit
