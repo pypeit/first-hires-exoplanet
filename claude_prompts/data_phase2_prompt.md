@@ -802,6 +802,167 @@ should now be re-run over all twenty; it reads whatever reductions it finds.
 - **Prompt 7** has the 1998-08-12 cell-in/cell-out pair, both reduced.
 
 
+### Prompt 4: the iodine-free stellar template
+
+Built by `first_hires_exoplanet/build_template.py`:
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.build_template
+```
+
+Products: `redux/template/hd187123_template_19980826.fits` (37 order
+extensions, in the data tree) and `first_hires_exoplanet/data/template_snr.csv`.
+
+#### What was co-added, and in which frame
+
+The three 1998-08-26 cell-out exposures, 500 s each, `IODIN = False` checked in
+the raw headers rather than taken from the survey:
+
+| KOAID | MJD | v_bary |
+|---|---|---|
+| `HI.19980826.34749` | 51051.402204 | −7.2433 km/s |
+| `HI.19980826.35345` | 51051.409098 | −7.2588 km/s |
+| `HI.19980826.35939` | 51051.415978 | −7.2740 km/s |
+
+Following prompt 1, every wavelength was first divided by `VEL_CORR` to undo
+PypeIt's heliocentric correction and recover the **observed** frame, which is
+what `pyodine` expects. The three exposures span 20 minutes, over which the
+barycentric velocity moves **−15.5 to −30.7 m/s**; each was shifted onto the
+first exposure's frame before co-adding. That is 0.5% of a resolution element
+and cosmetic, but this is the one spectrum every later velocity is measured
+against.
+
+`barycorrpy` is not installed in `pypeit14`, so `astropy` was used. Prompt 1
+established the two agree to a near-constant 4.6 m/s, which is irrelevant for
+the *relative* alignment of three exposures twenty minutes apart. Phase 3
+should still install `barycorrpy`, as prompt 1 recommended.
+
+#### Signal-to-noise achieved
+
+**Median S/N 309.5 per pixel, range 103.8 to 345.6**, against 62.1–198.1 in a
+single exposure. The gain is **1.72** against the ideal √3 = 1.73 — the
+co-addition is doing essentially everything it can.
+
+| order | λ (Å) | single | template | gain |
+|---|---|---|---|---|
+| 57 | 6210–6262 | 197.0 | 342.1 | 1.74 |
+| 60 | 5899–5984 | 197.8 | 345.3 | 1.75 |
+| 65 | 5445–5523 | 194.9 | 337.8 | 1.73 |
+| 70 | 5056–5129 | 188.2 | 324.6 | 1.72 |
+| 75 | 4719–4786 | 180.6 | 309.5 | 1.71 |
+| 80 | 4424–4488 | 162.1 | 275.9 | 1.70 |
+| 85 | 4164–4224 | 138.2 | 232.4 | 1.68 |
+| 89 | 3977–4034 | 115.5 | 193.8 | 1.68 |
+| 90 | 3933–3989 | 88.5 | 143.1 | 1.62 |
+| 93 | 3806–3861 | 62.1 | 103.8 | 1.67 |
+
+All 37 orders have all three exposures contributing at every good pixel. The
+full table is in `data/template_snr.csv`. Order 90 is the weakest gain, 1.62 —
+that is the Ca II H&K order, where the deep cores leave few high-flux pixels.
+
+The iodine region that phase 3 needs, orders 57–71, sits at **S/N 320–346**.
+
+#### Check 1: the cell really was out
+
+Absorption minima per 100 Å, prominence > 4% of the continuum, against a
+cell-in frame of the **same night** (`HI.19980826.44043`):
+
+| window | template | cell-in |
+|---|---|---|
+| iodine, 5000–6200 Å | **91.7** | **313.0** |
+| control, 4000–4800 Å | 229.5 | 231.9 |
+
+Decisive. In the control window, where the cell has no lines, the two agree to
+1%. In the iodine window the cell-in frame has **3.4×** the line density. The
+template is genuinely iodine-free, and the comparison is internally controlled
+rather than resting on a header keyword.
+
+#### Check 2: a G2V expectation
+
+All ten canonical G-dwarf features are present at sensible depths:
+
+| line | order | depth |
+|---|---|---|
+| Ca II K | 91 | 0.801 |
+| Ca II H | 90 | 0.730 |
+| H-delta | 87 | 0.745 |
+| H-gamma | 82 | 0.778 |
+| H-beta | 73 | 0.823 |
+| Mg b1/b2/b3 | 69 | 0.848 / 0.876 / 0.897 |
+
+**Velocity zero point.** These wavelengths are in the observed frame, so the
+lines are *not* at the −17.0 km/s systemic velocity — they sit at
+v_sys − BVC = **−9.76 km/s**. Measured median: **−8.43 km/s**, residual
+**+1.33 km/s**. Phase 1 found the same sign and size (−14.7 against −17.0, i.e.
++2.3 km/s) on a July frame, so this is the known zero-point offset rather than
+a new one. It is ~0.2 of a resolution element and comes from taking the deepest
+pixel of deep, asymmetric line cores.
+
+*Comparing against −17 km/s would have manufactured an 8 km/s error that is not
+there.* The first version of this check did exactly that.
+
+**Resolution.** The named Fe I lines give FWHM 13.2–22.3 km/s, but they are all
+strong and saturated with damping wings, so that is a stellar width, not an
+instrumental one. Measuring the **weak** lines instead — 91 features of depth
+0.10–0.40 in orders 78–81, which prompt 2 found clean in every epoch:
+
+| percentile | FWHM |
+|---|---|
+| 10th | 7.45 km/s |
+| 25th | 8.01 km/s |
+| 50th | 9.48 km/s |
+
+The narrowest features bound the resolution element from above, giving
+**R ≳ 40,200** against the ~45,000 expected for the B1 decker. Since weak lines
+still carry intrinsic width, that is a lower bound and it is consistent. It
+also rules out a giant or a fast rotator.
+
+#### Check 3: against the 1997-12-24 cell-out frame
+
+1997-12-24's only science frame happens to be cell-out, giving an independent
+comparison **eight months earlier**, on the other side of the `RED97`
+cross-disperser boundary and reduced with the trace-only flat-fielding of
+prompt 3.
+
+- 31 orders compared
+- correlation: **median 0.992**, minimum 0.882
+- velocity offset: **+0.16 km/s, scatter 0.07 km/s** across orders
+
+The two epochs are the same star, reduced consistently, over an eight-month
+baseline and across two different calibration routes. That 160 ± 70 m/s is
+**not** a planet measurement — it is far above the 72 m/s semiamplitude and is
+dominated by method systematics. It is, however, a useful early number: it is
+the first direct measurement in this project of the floor a cross-correlation
+reaches, and it lands exactly where context Q3 predicted, in the "tens to
+hundreds of m/s" band.
+
+#### Three corrections made along the way
+
+Recorded because each was wrong in a way that looked plausible:
+
+1. **The velocity expectation.** Comparing observed-frame lines against the
+   systemic velocity, forgetting the −7.24 km/s barycentric term the frame
+   still carries.
+2. **The line-width estimator.** Taking min-to-max of everything above half
+   depth measures the *window* rather than the line as soon as a blend enters
+   it: Fe I 4383 returned 111 km/s, which is 1.6 Å, the full window. Fixed by
+   walking out from the minimum along the contiguous run above half depth and
+   rejecting lines that never come back down.
+3. **The cross-correlation.** Every order returned exactly +0.00 km/s with zero
+   scatter — a suspiciously perfect result that was pure quantisation: the grid
+   sampled ~2 km/s per lag and the true offset is smaller. Parabolic refinement
+   of the peak turns it into +0.16 ± 0.07 km/s.
+
+#### What phase 3 still needs from the template
+
+- `pyodine` wants the template as a `StellarTemplate`, deconvolved against the
+  instrumental profile. This product is the co-added observation, not yet
+  deconvolved; that is prompt 8's and phase 3's work.
+- The template's own `bary_vel_corr` and `bary_date` are stored in the primary
+  header (`VBARY`, `MJDREF`) in the conventions prompt 1 settled: observed
+  frame, astropy barycentric at the exposure midpoint.
+
+
 ## Logs
 
 ### 2026-09-22 (Prompt 1: settled the reference frame — and found a sign error in PypeIt's heliocentric correction)
@@ -1050,3 +1211,78 @@ and parameters for December, per-night error handling, decker in the summary).
 
 **No git command changed state, and no raw frame or reduction product is in the
 repository.**
+
+### 2026-09-22 (Prompt 4: the stellar template -- S/N 310 median, iodine-free, and three broken checks fixed)
+
+**Task.** Prompt 4 of this document: co-add the three cell-out exposures of
+1998-08-26 into a single high-S/N iodine-free spectrum of HD 187123, order by
+order; check it against the 1997-12-24 cell-out frame and against a G2V
+expectation; report the S/N achieved per order. Full findings are in the Report
+section above.
+
+**What was done.**
+
+- Wrote `first_hires_exoplanet/build_template.py`: loads the three exposures in
+  the observed frame (dividing out `VEL_CORR` per prompt 1), shifts each onto
+  the first exposure's barycentric frame, inverse-variance co-adds per order,
+  and runs three independent checks.
+- Wrote `redux/template/hd187123_template_19980826.fits` (37 order extensions,
+  in the data tree) and `first_hires_exoplanet/data/template_snr.csv`.
+
+**Headline results.** Median S/N 309.5 per pixel, range 103.8-345.6, gain 1.72
+against the ideal sqrt(3) = 1.73. The iodine region phase 3 needs sits at
+320-346. The cell-out claim is confirmed internally: 91.7 absorption minima per
+100 A in 5000-6200 A against 313.0 for a cell-in frame of the same night, with
+a control window at 4000-4800 A agreeing to 1%. Against the 1997-12-24 cell-out
+frame, eight months earlier, 31 orders correlate at median 0.992 with a
+velocity offset of +0.16 +/- 0.07 km/s.
+
+**What this taught us about the repository and the data.**
+
+- **The observed frame moves the expected line velocity, and it is easy to
+  forget.** Having removed PypeIt's heliocentric correction, the lines sit at
+  v_sys - BVC = -9.76 km/s, not at the -17.0 km/s systemic velocity. The first
+  version of the check compared against -17 and reported an 8 km/s error that
+  did not exist. Any check of a wavelength zero point in this project has to
+  state which frame it is in first. The real residual, +1.33 km/s, matches the
+  +2.3 km/s phase 1 found on a July frame -- a known offset, not a new one.
+- **A "perfect" result is a bug report.** The cross-correlation against the
+  December frame returned exactly +0.00 km/s with 0.00 scatter for all 31
+  orders. That was not agreement, it was quantisation: the grid sampled ~2 km/s
+  per lag and the true offset is smaller than one lag. Sub-pixel refinement
+  turns it into +0.16 +/- 0.07 km/s. Zero scatter across 31 independent
+  measurements should never be believed.
+- **Strong lines do not measure resolution.** The Fe I lines chosen for a width
+  check are all saturated with damping wings and gave 13-22 km/s, which says
+  nothing about the instrument. Weak unsaturated lines (depth 0.10-0.40) give a
+  10th-percentile FWHM of 7.45 km/s, R >~ 40,200 against the ~45,000 expected.
+  Worth remembering when any line-profile diagnostic is written later.
+- **An envelope estimator needs to know where the line is.** Taking min-to-max
+  of everything above half depth measures the window, not the line, as soon as
+  a blend enters: Fe I 4383 returned 111 km/s, exactly the 1.6 A window width.
+  Walking outward from the minimum along the contiguous run above half depth,
+  and rejecting profiles that never come back down, fixes it and also rejects
+  the blends.
+- **The cell-out check should be internally controlled.** Counting I2 lines in
+  the template alone proves nothing -- a low count could mean a poor spectrum.
+  Counting them against a cell-in frame of the same night, with a blue control
+  window where the cell has no lines, turns it into a real test: 1% agreement
+  in the control, 3.4x difference in the iodine window.
+- **The eight-month cell-out comparison is the first real precision number this
+  project has.** 160 +/- 70 m/s between two independent epochs, across the
+  RED97 cross-disperser boundary and two different flat-fielding routes, lands
+  exactly in the "tens to hundreds of m/s" band context Q3 predicted for
+  cross-correlation, and is well above the 72 m/s semiamplitude. It is the
+  argument for phase 3, measured rather than asserted, and prompt 5 should be
+  expected to land near it.
+- **1997-12-24's only science frame is cell-out**, which is why the consistency
+  check was available at all. Worth noting that the December nights contribute
+  a template check rather than a velocity epoch.
+
+**Files added.**
+
+- `first_hires_exoplanet/build_template.py`
+- `first_hires_exoplanet/data/template_snr.csv`
+- `redux/template/hd187123_template_19980826.fits` (data tree, not the repo)
+
+**No git command changed state.**
