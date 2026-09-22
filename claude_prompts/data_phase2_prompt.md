@@ -963,6 +963,147 @@ Recorded because each was wrong in a way that looked plausible:
   frame, astropy barycentric at the exposure midpoint.
 
 
+### Prompt 5: relative velocities by cross-correlation
+
+Measured by `first_hires_exoplanet/measure_velocities.py`:
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.measure_velocities
+```
+
+Tables: `data/xcorr_velocities.csv` (36 epochs) and
+`data/xcorr_velocities_per_order.csv` (the 717 individual order velocities
+behind them).
+
+Prompt 2's quality filter was first re-run over all twenty nights. Its file
+glob had been written as `reduce_1998*` and silently excluded the two 1997
+December nights; corrected to `reduce_19*`, it now covers all 36 frames and
+1329 order-spectra, of which **719 of 790 blue order-spectra are usable**.
+
+#### Method
+
+Each epoch is cross-correlated against the prompt-4 template over the 22 orders
+lying entirely blueward of 5000 Å (orders 72–93), on a common log-wavelength
+grid at 1.5 km/s per pixel, searching ±60 km/s, with parabolic refinement of
+the peak. Only order-spectra prompt 2 marks usable take part.
+
+Both spectra are in the **observed** frame, `VEL_CORR` divided out per prompt 1,
+so PypeIt's heliocentric correction — with the +13 m/s sign error and 5 m/s
+drift prompt 1 found — never enters. In that frame a line sits at v_star − BVC,
+so the correlation returns dv_obs = (v_e − v_t) − (BVC_e − BVC_t), and the
+relative barycentric velocity is dv_obs + (BVC_e − BVC_t), with BVC from astropy
+at the exposure midpoint.
+
+**Internal check:** the three exposures that *are* the template return
+**+2.1, +17.0, −14.2 m/s**. They should return zero, and do, to 17 m/s.
+
+#### The two scatters
+
+They answer different questions and conflating them would be the whole error of
+this prompt.
+
+**PER-ORDER scatter, within one exposure** — *do the 22 blue orders agree with
+each other?*
+
+> **median 47 m/s**, range 13–156 m/s
+
+This is the precision of a single order and the internal consistency of the
+wavelength solution across the format. It is dominated by photon noise and by
+how well each order's dispersion solution agrees with its neighbours'.
+
+**EPOCH-TO-EPOCH scatter, across the baseline** — *does the same star give the
+same velocity on different nights?*
+
+> **rms 702 m/s** over 36 epochs and 269 days
+> (488 m/s excluding 1998-07-19, the one night with no arc of its own)
+
+This is the end-to-end precision of the method, and it includes everything the
+per-order scatter cannot see.
+
+**The gap between them is the result.** 47 m/s within an exposure against
+702 m/s between exposures means the limiting error is *not* photon noise and
+*not* the quality of individual orders — those are fine. It is something common
+to every order of a given exposure: the **wavelength zero point**. All 22 orders
+of one exposure agree with each other and then move together, by up to a
+kilometre per second, from one exposure to the next.
+
+That is precisely the error an iodine cell removes, by printing a wavelength
+fiducial onto the same photons through the same optics at the same instant.
+**This is the argument for phase 3, now measured rather than asserted.**
+
+#### Where the 702 m/s comes from
+
+| | rms |
+|---|---|
+| within a night (8 nights with >1 frame) | median **132 m/s**, worst spread **1604 m/s** |
+| between nights (20 nightly means) | **605 m/s** |
+
+So it is mostly a night-to-night effect, with a substantial intra-night
+component. Two nights show large drifts across a single night: 1998-08-25
+spans **1604 m/s over 6.7 hours** and 1998-08-26 **627 m/s over 6.9 hours** —
+consistent with instrument flexure and with a wavelength solution anchored to an
+arc taken at one end of the night.
+
+#### A phase-1 conclusion that needs correcting
+
+**1998-07-19 took no calibration frames at all and borrows the 07-18 arc.** Its
+three frames come out at **+2438, +1609, +1554 m/s**, against 0–400 m/s for
+every other July night. Excluding it drops the overall rms from 702 to 488 m/s.
+
+Phase 1 concluded that *"same-night arcs are not required"* because 07-19's
+wavelength-solution RMS was indistinguishable from the other nights'. That is
+true and beside the point: **the RMS measures the scatter of the fit, not its
+zero point.** A solution can be beautifully tight and sit a kilometre per
+second off. Any future night calibrated from a borrowed arc should be treated
+as having an unknown velocity offset until it is measured.
+
+#### Uncertainties, and why the small ones are not the honest ones
+
+| | median |
+|---|---|
+| formal (Zucker 2003, combined over orders) | **2.9 m/s** |
+| empirical (per-order scatter / √N) | **10.4 m/s** |
+| actual epoch-to-epoch rms | **702 m/s** |
+
+Both per-epoch error bars are optimistic by a factor of 70–240. Both are
+reported per epoch in the table, and neither should be used as the uncertainty
+on a velocity. The honest statement is that a single epoch's velocity is good to
+roughly **0.5–0.7 km/s**, set by the epoch-to-epoch scatter, and the formal
+errors describe only the internal consistency of one exposure.
+
+This is exactly why the prompt asked for the two scatters separately.
+
+#### The sign error, recorded because it looked like a result
+
+The first run produced velocities running smoothly from **+37.4 km/s in June to
+−10.9 km/s in September** — a clean annual curve. It was a sign error in the
+cross-correlation lag: a positive lag aligns the epoch feature at the *shorter*
+wavelength, so a positive lag means the epoch is blueshifted and dv_obs is
+negative. With the sign reversed the barycentric term was doubled instead of
+cancelled, and the output was the Earth's orbit rather than the star's velocity.
+
+It did not look like a bug. It looked like a smooth, physically shaped,
+high-precision measurement. The tell was magnitude: a 72 m/s planet cannot
+produce 37 km/s. The same error was present in prompt 4's
+`compare_against` and has been fixed there too; it changed only the sign of an
+already-small residual, since both spectra were put in a common frame first.
+
+#### What this gives the later prompts
+
+- **The per-epoch initial guess `pyodine` needs**, good to ~0.5 km/s, which is
+  far better than that code requires.
+- **The number for the argument**: cross-correlation on this data reaches
+  **~700 m/s**, or ~490 m/s discounting the arc-less night, against a **72 m/s**
+  semiamplitude. The method is an order of magnitude too coarse to see the
+  planet, as context Q3 and the phase-1 assessment both predicted.
+- **A quality signal prompt 2 could not give**: 1998-07-19's borrowed arc, and
+  the intra-night drifts on 08-25 and 08-26, are velocity-level problems
+  invisible to an S/N-based filter.
+- Prompt 6 should compare these against the published Keplerian and the modern
+  catalogue, and state plainly what 700 m/s against 72 m/s does and does not
+  demonstrate.
+
+
 ## Logs
 
 ### 2026-09-22 (Prompt 1: settled the reference frame — and found a sign error in PypeIt's heliocentric correction)
@@ -1284,5 +1425,82 @@ velocity offset of +0.16 +/- 0.07 km/s.
 - `first_hires_exoplanet/build_template.py`
 - `first_hires_exoplanet/data/template_snr.csv`
 - `redux/template/hd187123_template_19980826.fits` (data tree, not the repo)
+
+**No git command changed state.**
+
+### 2026-09-22 (Prompt 5: cross-correlation velocities -- 47 m/s within an exposure, 702 m/s between them)
+
+**Task.** Prompt 5 of this document: measure relative velocities by
+cross-correlation against the prompt-4 template, restricted to the orders
+blueward of 5000 A, with an honest uncertainty, weighted per order; write the
+table to `first_hires_exoplanet/data/`; report the per-order scatter and the
+epoch-to-epoch scatter separately. Full findings are in the Report section
+above.
+
+**What was done.**
+
+- Re-ran `quality_filter.py` over all twenty nights after fixing its file glob,
+  which had been written as `reduce_1998*` and silently excluded the two 1997
+  December nights. Now 36 epochs, 1329 order-spectra, 719 of 790 blue ones
+  usable.
+- Wrote `first_hires_exoplanet/measure_velocities.py`: log-wavelength
+  cross-correlation per order against the template, both sides in the observed
+  frame, barycentric correction applied explicitly, Zucker (2003) formal errors
+  alongside empirical ones.
+- Wrote `data/xcorr_velocities.csv` (36 epochs) and
+  `data/xcorr_velocities_per_order.csv` (717 order velocities).
+
+**Headline results.** Per-order scatter within an exposure: median 47 m/s.
+Epoch-to-epoch scatter across 269 days: 702 m/s, or 488 m/s excluding the one
+night with no arc of its own. The three exposures that are themselves the
+template return +2.1, +17.0 and -14.2 m/s, which is the internal check passing.
+
+**What this taught us about the repository and the data.**
+
+- **The gap between the two scatters is the scientific result, not a
+  disappointment.** 47 m/s within an exposure and 702 m/s between exposures
+  means the orders agree with each other and then move together. The limiting
+  error is not photon noise and not per-order wavelength quality -- it is the
+  wavelength zero point, common to all 22 orders of an exposure. That is
+  exactly the error an iodine cell removes, so phase 2 has now produced the
+  quantitative argument for phase 3 that the document asked for.
+- **A wavelength-solution RMS says nothing about its zero point, and phase 1's
+  conclusion needs correcting.** Phase 1 wrote that same-night arcs are not
+  required, because 1998-07-19's RMS was indistinguishable from nights with
+  their own arcs. Its three frames sit 1.5-2.4 km/s off every other July night.
+  The fit is tight and in the wrong place. Any night calibrated from a borrowed
+  arc -- 07-19, and 09-17 from prompt 3 -- carries an unknown velocity offset
+  until it is measured.
+- **A sign error can look exactly like a result.** The first run returned
+  velocities sweeping smoothly from +37.4 km/s in June to -10.9 km/s in
+  September: a clean, physically shaped annual curve with small error bars. The
+  cross-correlation lag had the wrong sign, so the barycentric term was doubled
+  rather than cancelled and the output was the Earth's orbit. Nothing about the
+  shape gave it away; only the magnitude did, because a 72 m/s planet cannot
+  produce 37 km/s. Worth a standing habit: check the amplitude of any new
+  measurement against what the physics allows before looking at its shape.
+- **Formal errors on a cross-correlation are not the precision.** Zucker (2003)
+  gives 2.9 m/s per epoch and the per-order scatter gives 10.4 m/s; the actual
+  repeatability is 702 m/s. Both are internal-consistency measures of a single
+  exposure and neither sees the zero point. Any error bar quoted in this project
+  should be checked against a repeatability measurement before it is believed.
+- **There is real intra-night structure.** 1998-08-25 drifts 1604 m/s across
+  6.7 hours and 08-26 627 m/s across 6.9 hours, with all orders moving together.
+  This is flexure plus a wavelength solution anchored to an arc at one end of
+  the night. It is invisible to prompt 2's S/N-based filter, which is a useful
+  reminder that quality has more than one axis.
+- **The template is internally consistent to 17 m/s**, which bounds the
+  co-addition and interpolation machinery well below anything that matters here.
+
+**Files added.**
+
+- `first_hires_exoplanet/measure_velocities.py`
+- `first_hires_exoplanet/data/xcorr_velocities.csv`
+- `first_hires_exoplanet/data/xcorr_velocities_per_order.csv`
+
+**Files modified.** `first_hires_exoplanet/quality_filter.py` (glob widened to
+`reduce_19*`); `first_hires_exoplanet/build_template.py` (the same
+cross-correlation sign error, which there only flipped the sign of an
+already-small residual).
 
 **No git command changed state.**

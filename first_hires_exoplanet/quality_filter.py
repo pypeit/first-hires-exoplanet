@@ -124,7 +124,7 @@ def measure_orders(redux_dir):
     Returns:
         `astropy.table.Table`_: one row per (epoch, order).
     """
-    files = sorted(glob.glob(os.path.join(redux_dir, 'reduce_1998*', 'Science',
+    files = sorted(glob.glob(os.path.join(redux_dir, 'reduce_19*', 'Science',
                                           'spec1d_*.fits')))
     if len(files) == 0:
         raise FileNotFoundError(f'No spec1d files under {redux_dir}')

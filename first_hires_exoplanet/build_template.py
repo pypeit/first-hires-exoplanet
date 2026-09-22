@@ -581,7 +581,10 @@ def compare_against(template, other_path):
             frac = 0.5 * (y0 - y2) / denom if denom != 0 else 0.
         else:
             frac = 0.
-        peak = lags[k] + frac
+        # Positive lag aligns a[i+l] with b[i], so the comparison frame sits
+        # at the shorter wavelength and the offset is negative; see the note in
+        # measure_velocities.ccf.
+        peak = -(lags[k] + frac)
         norm = cc.max() / np.sqrt(np.sum(a * a) * np.sum(b * b))
         rows.append(dict(order=order, wave=float(np.mean(grid)),
                          dv_kms=float(peak * dv), corr=float(norm)))
