@@ -131,6 +131,12 @@ DONOR_NIGHT = '19980812'
 #: How many flats every reduction uses, so the recipe does not vary
 N_FLATS = 4
 
+#: A real quartz flat has structure across the frame -- the illuminated orders
+#: against the gaps between them.  An unlit frame has none.  The good B1 flats
+#: of this era sit at IM01SD01 = 4,300-12,400 and the unlit ones at 1.3-1.5, so
+#: anything above a few hundred counts of structure is unambiguous.
+MIN_FLAT_SIGMA = 200.
+
 #: The prompt-8 parameter block, injected before the `# Setup` section
 PARAM_BLOCK = """[reduce]
     [[findobj]]
@@ -145,13 +151,25 @@ PARAM_BLOCK = """[reduce]
         no_local_sky = True
 """
 
-#: Frames that are science rather than calibration, by KOAID prefix
+#: Frames that are science rather than calibration.  Matched as a SUBSTRING of
+#: the raw TARGNAME card, not for equality: on 1998-08-12 the observer typed
+#: `TARGNAME = 'H187123'`.  KOA's own `targname` column normalises that to
+#: `187123`, so the archive survey and the downloader both find the frames and
+#: only a reader of the raw header sees the typo.  With an equality test that
+#: night -- the flat donor for the whole August-September block, and the one
+#: carrying the cell-in/cell-out pair -- silently has no science frames.
 SCIENCE_TARGET = '187123'
 
 
 # ---------------------------------------------------------------------------
 # Staging
 # ---------------------------------------------------------------------------
+
+#: PypeIt's echelle-angle tolerance for grouping frames into one configuration
+#: (`keck_hires.py`: rtol 1e-3, atol 1e-2).  A flat outside this of the science
+#: frame lands in a different configuration and is simply not seen.
+ECH_RTOL, ECH_ATOL = 1e-3, 1e-2
+
 
 def frame_roles(raw_dir):
     """ Classify every raw frame in a directory from its own FITS header.
@@ -173,7 +191,8 @@ def frame_roles(raw_dir):
         hdr = fits.getheader(path)
         decker = str(hdr.get('DECKNAME', '')).strip()
         mjd = float(hdr.get('MJD', 0.))
-        if str(hdr.get('TARGNAME', '')).strip() == SCIENCE_TARGET:
+        ech = float(hdr.get('ECHANGL', np.nan))
+        if SCIENCE_TARGET in str(hdr.get('TARGNAME', '')):
             role = 'science'
         elif hdr.get('LAMPCAT1') or hdr.get('LAMPCAT2'):
             role = 'arc'
@@ -182,11 +201,24 @@ def frame_roles(raw_dir):
             # hatch-open flat sees the sky, and an iodine-in flat would imprint
             # the I2 forest on the flat field and partly divide it out of the
             # science frames, which is fatal for phase 3.
-            clean = (not hdr.get('HATOPEN')) and (not hdr.get('IODIN'))
+            #
+            # XCOVOPEN matters just as much and is not in any archive
+            # classification.  Five of 1998-08-12's eighteen "Narrowflat"
+            # frames were taken with the cross-disperser cover shut: the
+            # archive calls them flatlamp, iodine out, hatch closed, and they
+            # contain nothing but bias -- mean 768 counts with a standard
+            # deviation of 1.4, against 17,400 and 12,000 for a real one.
+            # PypeIt silently declines to frametype them, and the reduction
+            # dies much later with "No frames of type=trace provided".
+            lit = (hdr.get('XCOVOPEN')
+                   and float(hdr.get('IM01SD01', 0.)) > MIN_FLAT_SIGMA)
+            clean = ((not hdr.get('HATOPEN')) and (not hdr.get('IODIN'))
+                     and lit)
             role = 'flat' if clean else 'flat_dirty'
         else:
             role = 'other'
-        out.append(dict(path=path, role=role, decker=decker, mjd=mjd))
+        out.append(dict(path=path, role=role, decker=decker, mjd=mjd,
+                        ech=ech))
     return out
 
 
@@ -215,13 +247,26 @@ def choose_flats(night):
         chosen = nearest(mine)[:N_FLATS]
         return [f['path'] for f in chosen], '{:s} own {:s}'.format(night, deck)
 
+
     donor = frame_roles(os.path.join(RAW_ROOT, NIGHTS[DONOR_NIGHT][0]))
     theirs = [f for f in donor if f['role'] == 'flat' and f['decker'] == deck]
     if len(theirs) < N_FLATS:
         return [], 'NONE ({:s} has {:d} own {:s} flats, donor {:s} has {:d})'.format(
             night, len(mine), deck, DONOR_NIGHT, len(theirs))
     chosen = nearest(theirs)[:N_FLATS]
-    return [f['path'] for f in chosen], '{:s} {:s}'.format(DONOR_NIGHT, deck)
+
+    # Would PypeIt even put these in the same configuration?  If not, say so
+    # here rather than letting it surface as an opaque "No frames of
+    # type=trace" three minutes into the reduction.
+    ech_sci = float(np.median([f['ech'] for f in science]))
+    dech = max(abs(f['ech'] - ech_sci) for f in chosen)
+    if dech > ECH_ATOL + ECH_RTOL * abs(ech_sci):
+        return ([f['path'] for f in chosen],
+                'ILLEGAL: nearest donor {:s} is d_echangle {:.4f} away, '
+                'outside PypeIt\'s {:.3f} tolerance -- expect no trace frames'
+                .format(DONOR_NIGHT, dech, ECH_ATOL))
+    return ([f['path'] for f in chosen],
+            '{:s} {:s} (d_echangle {:.4f})'.format(DONOR_NIGHT, deck, dech))
 
 
 def stage_night(night, overwrite=False):
@@ -400,6 +445,9 @@ def summarise(night):
             continue
         frames.append(dict(
             spec1d=os.path.basename(path),
+            decker=str(sobjs.header.get('DECKER', '')).strip(),
+            mjd=float(sobjs.header.get('MJD', 0.)),
+            exptime=float(sobjs.header.get('EXPTIME', 0.)),
             n_orders=len(orders),
             order_min=min(orders), order_max=max(orders),
             snr_min=min(snr), snr_med=float(np.median(snr)), snr_max=max(snr),
@@ -418,9 +466,9 @@ def print_summary(summaries):
     print('=' * 96)
     print('NIGHT-TO-NIGHT STABILITY, HD 187123 discovery era')
     print('=' * 96)
-    print('{:<10s} {:>6s} {:>7s} {:>9s} {:>8s} {:>8s} {:>8s}   {:s}'.format(
-        'night', 'frames', 'orders', 'orders', 'S/N min', 'S/N med', 'S/N max',
-        'wavecal RMS (px)'))
+    print('{:<10s} {:>6s} {:>4s} {:>7s} {:>9s} {:>8s} {:>8s} {:>8s}   {:s}'.format(
+        'night', 'frames', 'deck', 'orders', 'orders', 'S/N min', 'S/N med',
+        'S/N max', 'wavecal RMS (px)'))
     for s in summaries:
         if s is None:
             continue
@@ -429,10 +477,12 @@ def print_summary(summaries):
             if i == 0 and s['rms_med'] is not None:
                 rms = '{:.3f} / {:.3f} / {:.3f}  (n={:d})'.format(
                     s['rms_min'], s['rms_med'], s['rms_max'], s['n_solutions'])
-            print('{:<10s} {:>6s} {:>7d} {:>9s} {:>8.1f} {:>8.1f} {:>8.1f}   {:s}'.format(
+            print('{:<10s} {:>6s} {:>4s} {:>7d} {:>9s} {:>8.1f} {:>8.1f} {:>8.1f}   {:s}'.format(
                 s['night'] if i == 0 else '', '{:d}/{:d}'.format(i + 1, s['n_frames']),
-                fr['n_orders'], '{:d}-{:d}'.format(fr['order_min'], fr['order_max']),
+                fr.get('decker', ''), fr['n_orders'],
+                '{:d}-{:d}'.format(fr['order_min'], fr['order_max']),
                 fr['snr_min'], fr['snr_med'], fr['snr_max'], rms))
+    missing = [s for s in summaries if s is None]
     print('=' * 96)
 
 
@@ -463,18 +513,26 @@ def main():
                 # One night failing must not abandon the other eighteen; the
                 # point of prompt 3 is to find out which nights need help.
                 failures[night] = str(exc)
-                print('  FAILED: {:s}'.format(exc))
+                print('  FAILED: {:s}'.format(str(exc)))
     if failures:
         print('\n{:d} night(s) failed:'.format(len(failures)))
         for night, msg in sorted(failures.items()):
             print('  {:s}: {:s}'.format(night, msg))
 
-    summaries = [summarise(n) for n in sorted(NIGHTS)]
-    print_summary(summaries)
+    summaries = {n: summarise(n) for n in sorted(NIGHTS)}
+    print_summary([summaries[n] for n in sorted(NIGHTS)])
+
+    absent = [n for n in sorted(NIGHTS) if summaries[n] is None]
+    if absent:
+        print('\nNo reduction on disk for {:d} night(s): {:s}'.format(
+            len(absent), ', '.join(absent)))
+    print('{:d} of {:d} nights reduced; {:d} science frames extracted.'.format(
+        len(NIGHTS) - len(absent), len(NIGHTS),
+        sum(s['n_frames'] for s in summaries.values() if s)))
 
     out = os.path.join(REDUX_ROOT, 'run_summary.json')
     with open(out, 'w') as fh:
-        json.dump([s for s in summaries if s], fh, indent=2)
+        json.dump([s for s in summaries.values() if s], fh, indent=2)
     print('Wrote {:s}'.format(out))
 
 

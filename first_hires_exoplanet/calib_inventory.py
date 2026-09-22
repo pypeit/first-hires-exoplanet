@@ -21,6 +21,17 @@ This module reads the archive survey already in the repository
 per night, the frames that are in the planet-search configuration and what role
 each can play.  It queries nothing and downloads nothing.
 
+It also checks the frames on disk against what the archive says about them,
+because on this dataset the two disagree.  Five of 1998-08-12's eighteen
+"Narrowflat" frames are recorded by KOA as `flatlamp`, iodine out, hatch
+closed -- a perfect clean flat by every column in the survey -- and contain
+nothing at all: the cross-disperser cover (`XCOVOPEN`) was shut, so they hold
+bias and read noise, mean 768 counts with a standard deviation of 1.4 against
+17,400 and 12,000 for a real one.  PypeIt declines to frametype them and the
+reduction fails several minutes later with "No frames of type=trace provided",
+which says nothing about the cause.  Calibrations cannot be chosen from
+metadata alone.
+
 Run with:
 
     conda run -n pypeit14 python -m first_hires_exoplanet.calib_inventory
@@ -199,12 +210,52 @@ def flat_donors(tbl, nights):
 # Main
 # ---------------------------------------------------------------------------
 
+def verify_flats(raw_root):
+    """ Check the clean flats on disk against what the archive claims.
+
+    Args:
+        raw_root (str): the raw data tree.
+
+    Returns:
+        `astropy.table.Table`_: one row per candidate flat found on disk.
+    """
+    import glob
+    from astropy.io import fits
+
+    rows = []
+    for path in sorted(glob.glob(os.path.join(raw_root, '*', 'HI.*.fits'))):
+        hdr = fits.getheader(path)
+        if str(hdr.get('TARGNAME', '')).strip() == '187123':
+            continue
+        if hdr.get('LAMPCAT1') or hdr.get('LAMPCAT2'):
+            continue
+        if not (hdr.get('LAMPQTZ2')
+                or str(hdr.get('LAMPNAME', '')).strip() == 'quartz1'):
+            continue
+        if hdr.get('IODIN') or hdr.get('HATOPEN'):
+            continue
+        rows.append(dict(
+            frame=os.path.basename(path),
+            night=str(hdr.get('DATE-OBS', '')).strip(),
+            decker=str(hdr.get('DECKNAME', '')).strip(),
+            ech=float(hdr.get('ECHANGL', np.nan)),
+            xcovopen=bool(hdr.get('XCOVOPEN')),
+            mean=float(hdr.get('IM01MN01', np.nan)),
+            sigma=float(hdr.get('IM01SD01', np.nan)),
+        ))
+    return Table(rows) if rows else None
+
+
 def parse_args(options=None):
     parser = argparse.ArgumentParser(
         description='Calibration inventory for the discovery-era nights.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--survey', type=str, default=DEFAULT_SURVEY,
                         help='Archive survey CSV')
+    parser.add_argument('--raw', type=str, default=os.path.join(
+                            os.path.dirname(os.path.dirname(_HERE)),
+                            'first-hires-exoplanet-data', 'raw'),
+                        help='Raw data tree, for the on-disk flat check')
     return parser.parse_args() if options is None else parser.parse_args(options)
 
 
@@ -259,6 +310,27 @@ def main(pargs):
           f'  (span {np.ptp(nights["ech_sci"]):.5f}, tolerance {ECH_ATOL})')
     print('  => nights more than 0.01 apart in echelle angle cannot share')
     print('     calibrations, so there is no single flat set for the era.')
+
+    print('\n=== 6. Do the flats on disk contain anything? ===')
+    flats = verify_flats(pargs.raw)
+    if flats is None:
+        print(f'  No raw frames under {pargs.raw}; skipping.')
+        return
+    dead = flats[~np.asarray(flats['xcovopen'], dtype=bool)]
+    live = flats[np.asarray(flats['xcovopen'], dtype=bool)]
+    print(f'  {len(flats)} clean flats on disk by every archive column')
+    print(f'    cross-disperser cover OPEN : {len(live):3d}  '
+          f'sigma {np.min(live["sigma"]):.0f}-{np.max(live["sigma"]):.0f}')
+    if len(dead):
+        print(f'    cross-disperser cover SHUT : {len(dead):3d}  '
+              f'sigma {np.min(dead["sigma"]):.1f}-{np.max(dead["sigma"]):.1f}'
+              f'  <- EMPTY, unusable')
+        for night in sorted(set(dead['night'])):
+            n = int(np.sum(dead['night'] == night))
+            tot = int(np.sum(flats['night'] == night))
+            print(f'      {night}: {n} of {tot}')
+    else:
+        print('    cross-disperser cover SHUT :   0')
 
 
 if __name__ == '__main__':

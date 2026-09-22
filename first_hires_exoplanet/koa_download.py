@@ -206,7 +206,7 @@ for _night, _deck in ERA_NIGHTS.items():
     SELECTIONS.append(dict(
         label='flat_{:s}_clean'.format(_deck), night=_night,
         where="koaimtyp IN ('flatlamp', 'trace') AND deckname = '{:s}' "
-              "AND iodin = 'F' AND hatopen = 'F'".format(_deck),
+              "AND iodin = 'F' AND hatopen = 'F' AND xcovopen = 'T'".format(_deck),
         keep=None))
 
 # 1998-09-17 observed HD 187123 through the B2 decker and took no B2 ThAr arc.
@@ -217,6 +217,21 @@ SELECTIONS.append(dict(
     label='arc_B2_for_0917', night='19980915',
     where="koaimtyp = 'arclamp' AND deckname = 'B2' AND elaptime >= 5",
     keep=None))
+
+# December 1997 has no iodine-free B1 flat, and its echelle angle (+0.0149,
+# +0.0160) is too far from every clean B1 flat in the era for PypeIt to accept
+# one.  What it does have is a hatch-closed, cover-open, quartz B1 flat with the
+# iodine cell IN, at exactly the science echelle angle.  An iodine-in flat is
+# useless as a pixel flat -- it would divide the I2 forest out of the science
+# frames -- but it traces the orders perfectly well, because the cell modulates
+# the spectrum along dispersion without moving the orders.  Fetch it so the
+# trace-only intervention can be tried.  See the prompt-3 Report.
+for _night in ('19971223', '19971224'):
+    SELECTIONS.append(dict(
+        label='flat_B1_iodine_trace', night=_night,
+        where="koaimtyp IN ('flatlamp', 'trace') AND deckname = 'B1' "
+              "AND iodin = 'T' AND hatopen = 'F' AND xcovopen = 'T'",
+        keep=None))
 
 #: Chunk size for streaming downloads, bytes
 CHUNK = 1 << 20
