@@ -237,6 +237,8 @@ exact `pyodine` commit for anything derived from it.
    decide whether the nine upstream items from phase 1 should go to Ryan Cooke
    now. Use Opus 5. Log your work.
 
+10. Read this file. Write the phase-3 prompt doc. Use Opus 5. Log your work.
+
 ## Q&A
 
 ## Report
@@ -1793,6 +1795,70 @@ and a written statement of exactly what `pyodine` still needs."*
 All four. Phase 2 is complete.
 
 
+### Prompt 10: the phase-3 prompt doc
+
+Written to `claude_prompts/data_phase3_prompt.md`, following the structure
+phases 1 and 2 established: Goals, the decision the document makes, what we
+already know, Code, Prompts, Logging, Q&A, Report, Logs.
+
+**It makes two decisions up front**, so they are not re-argued in every prompt.
+
+*First, we fork `pyodine` and own it from that moment.* Not a submodule, not a
+`pip install`, not runtime patches — `vendor/pyodine/` at a recorded commit,
+with every change a normal commit carrying a test that fails before and passes
+after. Phase 2 found four things in it that are wrong for us, two of which fail
+silently, and the repository has one commit and no issue traffic. That does not
+make it a bad code; its paper demonstrates 0.69 m/s on SONG solar data. It
+makes it what the phase-2 document already called it: a reference
+implementation to adapt, not a dependency to trust.
+
+*Second, the target is a detection, not a match to Butler.* Setting the bar at
+Butler's 3 m/s or the modern catalogue's 1.2 m/s would guarantee failure
+against pipelines built around this instrument over decades. With 31 cell-in
+epochs and the period known, `sigma_K ~ sigma_epoch * sqrt(2/N)`:
+
+| per-epoch | sigma_K | significance of K = 72 m/s |
+|---|---|---|
+| 200 m/s | 50.8 | 1.4 sigma |
+| 100 m/s | 25.4 | 2.8 sigma |
+| **50 m/s** | **12.7** | **5.7 sigma** |
+| 30 m/s | 7.6 | 9.4 sigma |
+| 10 m/s | 2.5 | 28.3 sigma |
+
+**Phase 3 succeeds at 50 m/s per epoch** — 14x better than phase 2 and about
+17x short of Butler, and both of those should be said plainly in anything we
+publish. Below 10 m/s we should suspect a mistake rather than celebrate.
+
+The photon budget supports it: the forward model works on the iodine orders,
+5000-6200 Å, where the template reaches S/N 320-346 against 104-193 in the blue
+orders phase 2 was confined to.
+
+**Eleven prompts**, ordered so that each is checkable before the next depends
+on it: vendor unchanged and establish it works as shipped; make the four HIRES
+changes with tests; deconvolve the template; write the remaining
+`utilities_hires` files and fit *one chunk*; fit one epoch; settle the
+instrumental profile, which is expected to be the largest single lever; fit all
+31 epochs; assess against the Keplerian in the same form as phase 2 prompt 6 so
+the two are comparable; diagnose what the model fixed and what it did not; send
+the upstream report; write the assessment and update the public document.
+
+Two things carried in deliberately. The **eight known traps** are listed
+explicitly — air versus vacuum, the linear depth model, the two wrong
+docstrings, zero-flux versus zero-weight, the catalogue's mislabelled time
+column, PypeIt's heliocentric sign error, the borrowed-arc and no-pixel-flat
+nights, and the observation that *a plausible-looking wrong answer is the
+normal failure mode here*. And prompt 9 is a **test the project already has**:
+the two borrowed-arc nights sit 1.5-2.4 km/s off, and a forward model that
+derives its own wavelength solution from the I2 lines should bring them back.
+If it does not, phase 3 is not working.
+
+**The document also adds a `## Logging` section**, which phases 1 and 2 never
+had even though `CLAUDE.md` refers to one. The format was established by
+example and followed correctly, but a new reader had to infer it from nine
+existing entries. It is now written down, including the point that the log
+records the work and the lessons while the Report records the result.
+
+
 ## Logs
 
 ### 2026-09-22 (Prompt 1: settled the reference frame — and found a sign error in PypeIt's heliocentric correction)
@@ -2478,5 +2544,66 @@ drifting 5.16 m/s over nine months) and the omitted relativistic terms
   ways to look right.
 
 **Files changed.** `claude_prompts/data_phase2_prompt.md` only.
+
+**No git command changed state.**
+
+### 2026-09-23 (Prompt 10: wrote the phase-3 prompt doc)
+
+**Task.** Prompt 10 of this document: write the phase-3 prompt doc. The
+resulting document is `claude_prompts/data_phase3_prompt.md`; what it decides
+is summarised in the Report section above.
+
+**What was done.**
+
+- Re-read the phase-1 and phase-2 document structures and the Q3 scope in
+  `context_prompts.md`, and wrote `claude_prompts/data_phase3_prompt.md` to
+  match: Goals, the decision the document makes, what we already know, Code,
+  Prompts, Logging, Q&A, Report, Logs.
+- Computed the detection-significance table rather than asserting it, and
+  checked the five rows against `sigma_epoch * sqrt(2/N)` with N = 31.
+- Carried forward every phase-2 product, trap and open question with its
+  measured number.
+
+**Headline results.** Eleven prompts. Two framing decisions: fork `pyodine`
+into `vendor/pyodine/` and own it, and set the success bar at 50 m/s per epoch
+-- a 5.7 sigma detection of the published Keplerian -- rather than at Butler's
+3 m/s.
+
+**What this taught us about the repository and the data.**
+
+- **The phase-2 document's most valuable feature was deciding something.** Its
+  "The decision this document makes" section settled the framing once, and
+  every later prompt inherited it instead of relitigating whether
+  cross-correlation was the point. Phase 3 has two such decisions and they are
+  in the same place. A prompt doc that only lists tasks would have been weaker.
+- **Setting a defensible success threshold needs a calculation, not a
+  sentiment.** "As good as we can" is unfalsifiable and "as good as Butler" is
+  a guaranteed failure. `sigma_K ~ sigma_epoch * sqrt(2/N)` turns it into a
+  table, and the table makes 50 m/s an argued choice rather than a hopeful one.
+  It also identifies the lower bound at which we should start looking for a
+  mistake, which matters more here than the upper one.
+- **The traps list is the most reusable thing phase 2 produced.** Eight items,
+  each of which cost real time at least once, several of which fail silently.
+  Writing them into the phase-3 doc as a numbered list -- rather than leaving
+  them scattered through nine Report sections -- is what stops them being paid
+  for twice.
+- **`CLAUDE.md` refers to a `## Logging` section that neither phase-1 nor
+  phase-2 actually has.** The convention was established by example and
+  followed correctly, but only because nine prior entries were there to copy.
+  The phase-3 doc writes it down.
+- **Phase 3 inherits a ready-made falsification test.** The two borrowed-arc
+  nights are 1.5-2.4 km/s off in phase 2's velocities, and a forward model that
+  derives its own wavelength solution from the iodine lines must bring them
+  back into line. Having a prediction that the new method should demonstrably
+  fix something the old one got wrong is worth more than another precision
+  number, and it came free from phase 2 having measured the failure.
+- **Two items are outstanding debts, not new work**, and both are in the
+  prompt list so they do not quietly lapse: the upstream report to Ryan Cooke
+  that phase 2 prompt 9 decided to send but did not, and the never-diagnosed
+  1998-09-13 night that returned 34 orders.
+
+**Files added.** `claude_prompts/data_phase3_prompt.md`
+
+**Files modified.** `claude_prompts/data_phase2_prompt.md` (Report and Logs).
 
 **No git command changed state.**
