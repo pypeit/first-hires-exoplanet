@@ -1393,6 +1393,406 @@ a new place. The prompt-8 adapter must read `wavelength`, not `wavelength_air`.
    the whole difference between two cells whose temperatures we cannot measure.
 
 
+### Prompt 8: the `pyodine` input adapter
+
+`first_hires_exoplanet/utilities_hires/`, laid out like `pyodine`'s own
+`utilities_lick/` so it drops into a vendored tree unchanged:
+
+| file | |
+|---|---|
+| `__init__.py` | package exports |
+| `load_pyodine.py` | `ObservationWrapper`, `IodineTemplate`, `load_file`, `get_star`, `get_instrument`, `HIRES` |
+| `__main__.py` | the self-check |
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.utilities_hires
+```
+
+No forward model is attempted, as the prompt directs. `conf.py`,
+`pyodine_parameters.py` and `timeseries_parameters.py` are phase 3's.
+
+#### What it presents
+
+| `pyodine` expects | supplied from |
+|---|---|
+| `flux` (nord, npix) | `OPT_COUNTS` |
+| `wave` (nord, npix) | `OPT_WAVE` **divided by `VEL_CORR`** |
+| `cont` (nord, npix) | running 95th-percentile continuum |
+| `weight` (nord, npix) | `OPT_COUNTS_IVAR`, zeroed where unusable |
+| `bary_date` | full **JD(UTC)** at the exposure midpoint |
+| `bary_vel_corr` | barycentric correction in **m/s** |
+| `nord`, `npix`, `instrument`, `star`, `exp_time`, `iodine_in_spectrum` | headers |
+
+All 36 epochs load: 37 orders × 2048 pixels, except 1998-09-13's 34.
+
+#### The four things it has to get right
+
+**1. Reference frame (prompt 1).** Every wavelength is divided by `VEL_CORR`,
+**unconditionally**, treating an absent value as 1.0. That undoes PypeIt's
+heliocentric correction — whose sign error on the solar term is worth +13 m/s
+and drifts 5 m/s over this baseline — and returns the observed frame, which is
+what `pyodine`'s `chunks.py` requires, since it shifts the template by the
+*difference* of the two barycentric corrections. Doing it unconditionally means
+the adapter is correct whether a night was reduced with `refframe = heliocentric`
+or `observed`, which is the structural guard prompt 1 asked for. Verified in the
+self-check: the recovered shift matches `1/VEL_CORR − 1` to 10⁻⁶ km/s.
+
+**2. Units and epoch (prompt 1).** `bary_date` is a full JD in UTC, not the
+"Barycentric Reduced Julian Date" `components.py:315` claims — the value goes
+to `barycorrpy.get_BC_vel(JDUTC=...)`, which converts it itself, and a reduced
+JD would place the observation in 1858. `bary_vel_corr` is in **m/s**, not the
+km/s of `components.py:316` — `chunks.py` divides it by `astropy.constants.c`
+in m/s. The header MJD is the exposure *start*, so the midpoint is constructed:
+the self-check confirms `bary_date` sits exactly `exptime/2` after it.
+
+**3. Quality (prompt 2).** 150 of 1329 order-spectra get zero weight, matching
+prompt 2's count exactly. Their **flux is deliberately left intact**:
+`components.Spectrum.__init__` raises `NoDataError` on an all-zero flux vector,
+so zeroing the flux would make an order *unloadable* rather than merely unused.
+The self-check loads every one of the 1329 orders to confirm none was broken.
+
+**4. Vacuum, not air (prompt 7).** `IodineTemplate` reads `wavelength`, where
+the Lick version reads `wavelength_air`. The grids differ by 83 km/s and using
+the wrong one drops the correlation against the measured HIRES cell from +0.90
+to +0.08.
+
+#### Two deliberate departures from the Lick adapter
+
+**Weights.** `pyodine`'s `compute_weight` offers `'flat'` (ones) and
+`'inverse'` (1/(f(1+f·rel_noise²)), inherited from the dop code). Neither knows
+that PypeIt has already propagated a full inverse variance through the
+extraction, nor that prompt 2 rejected 11% of order-spectra. The default here
+is `'inverse-variance'`: the propagated `OPT_COUNTS_IVAR`, zeroed on masked
+pixels and rejected orders. 58.8% of pixels carry non-zero weight. Both
+`pyodine` options remain available for comparison.
+
+**Atlas depth.** `IodineTemplate` raises the atlas transmission to
+α = 2.59 by default (prompt 7), because `pyodine`'s `iod_depth` scales depth
+*linearly* and at this exponent would send 5.8% of the atlas to negative
+transmission. `scale_depth=False` gives the unmodified atlas.
+
+#### It runs without `pyodine`, and subclasses it when present
+
+`pyodine` is not installed, and prompt 8 is not the place to vendor it. The
+classes subclass `pyodine.components` when it is importable and fall back to
+equivalent stand-ins when it is not, so the adapter is testable today and
+becomes the real thing the moment `pyodine` is vendored. `HAVE_PYODINE` reports
+which. The module imports no PypeIt — spec1d files are read with plain
+`astropy.io.fits` — so it can live inside a vendored `pyodine` tree with no
+dependency on this project.
+
+#### An unexpected validation, and a warning about the catalogue
+
+The adapter's `bary_date` can be checked against the modern catalogue, which
+carries its own time for every one of these frames. Comparing:
+
+| | |
+|---|---|
+| catalogue "BJD" − our JD(UTC) | **−1.0 to −2.6 s**, flat |
+| Römer delay over the same epochs | **−228 s to +286 s** |
+| TDB − UTC | +63.2 s, constant |
+
+If the catalogue's column were a true BJD(TDB) the difference would track the
+Römer delay and swing by about 500 s. It does not. **The Teklu et al. "BJD"
+column is JD(UTC) at mid-exposure, despite being described as a Barycentric
+Julian date.**
+
+Two consequences. First, this independently validates the adapter's `bary_date`
+to about 2 seconds against a source that had nothing to do with it — the
+residual is presumably a difference in how mid-exposure is defined. Second,
+anyone treating that column as a BJD is wrong by up to 8 minutes. For the
+3.097-day period that is 0.001 in phase and about 0.5 m/s of induced RV error,
+so it does not change prompt 6's conclusions, but it would matter to a
+phase-3-precision analysis.
+
+#### Self-check results
+
+```
+pyodine importable : False
+spec1d files found : 36
+quality flags      : 1329 (epoch, order) pairs
+rectangular (nord, npix)      : {(37, 2048), (34, 2048)}
+VEL_CORR removed              : +11.189 km/s (expect +11.189)
+bary_date is a full JD        : True
+bary_vel_corr in m/s          : -12677 to +11581
+midpoint, not start           : 250.0 s after MJD
+orders zero-weighted          : 150 of 1329
+every order still loadable    : True
+compute_weight default        : inverse variance, 58.8% of pixels non-zero
+ALL CHECKS PASS
+```
+
+#### What phase 3 still has to do
+
+1. **Vendor `pyodine`** at a recorded commit and install `h5py` and
+   `barycorrpy` into `pypeit14`.
+2. **Change the depth model** from linear to power-law, or accept the
+   pre-scaled atlas this adapter supplies.
+3. **Write the other four `utilities_hires` files** — `conf.py`,
+   `pyodine_parameters.py`, `timeseries_parameters.py`, and a `logging.json`.
+4. **Deconvolve the template.** `pyodine` wants a `StellarTemplate`
+   deconvolved against the instrumental profile; prompt 4 produced the co-added
+   observation, not that.
+5. **Decide the gain question.** The raw headers give `CCDGN01` = 4.8 e⁻/ADU
+   and `CCDRN01` = 6.0 e⁻ against PypeIt's hard-coded 1.9 and 2.8. The inverse
+   variance in these files is on PypeIt's scale, so the weights are internally
+   consistent and a forward model fitting its own continuum will not care about
+   an overall factor — but the *relative* weighting of bright and faint pixels
+   does depend on it. The adapter records PypeIt's values and rescales nothing.
+
+
+### Prompt 9: the phase-2 assessment
+
+**Phase 2 succeeded, and the thing it succeeded at is not the one in its
+title.** The document was named for relative velocities by cross-correlation
+and then, in "The decision this document makes", reframed itself: the
+cross-correlation is the instrument, not the deliverable. That reframing was
+right. The velocities are a clean, expected non-detection; what phase 2
+actually delivered is a twenty-night reduction, a template, a settled atlas, a
+working adapter, and a *measured* case for phase 3 in place of an asserted one.
+
+All numbers below are from the committed products, not from memory:
+`redux/run_summary.json`, `data/order_quality.csv`,
+`data/xcorr_velocities.csv`, `data/template_snr.csv`.
+
+#### What the cross-correlation achieved, and what it cost
+
+Achieved: **36 epochs over 269 days**, every one yielding a velocity, measured
+against the prompt-4 template over the 22 orders blueward of 5000 Å.
+
+| | |
+|---|---|
+| per-order scatter within one exposure | **47 m/s** (median) |
+| epoch-to-epoch scatter | **702 m/s** (488 excluding the arc-less night) |
+| formal error per epoch (Zucker) | 2.9 m/s |
+| the planet | 72 m/s |
+
+Fitting the published period gives K = 408 ± 188 m/s and a 95% upper limit of
+785 m/s — eleven times the semiamplitude, consistent with the published planet
+and equally consistent with no planet. **Nothing in the result would have
+looked different if HD 187123 b did not exist.**
+
+The cost was two working days of compute and roughly 10 GB of reductions, and
+it bought three things worth more than a velocity:
+
+1. **The gap between 47 and 702 m/s is the diagnosis.** The orders of one
+   exposure agree with each other and then move together. The limit is not
+   photons and not per-order wavelength quality — it is the wavelength zero
+   point, which is precisely and only what an iodine cell fixes. Teklu et al.
+   reach 1.2 m/s on these same frames.
+2. **Two nights carry velocity-level defects invisible to an S/N filter.**
+   1998-07-19, calibrated from a borrowed arc, sits 1.5–2.4 km/s off; 1998-09-17
+   is on a borrowed arc too. This corrects a phase-1 conclusion — see below.
+3. **A real intra-night signal.** 1998-08-25 drifts 1604 m/s across 6.7 hours,
+   08-26 627 m/s across 6.9. Flexure, plus a solution anchored at one end of
+   the night.
+
+**A phase-1 conclusion that phase 2 overturns.** Phase 1 wrote that same-night
+arcs are not required, because 07-19's wavelength RMS was indistinguishable
+from nights that had their own. The RMS measures the scatter of the fit, not
+its zero point; the fit is tight and a kilometre per second out of place.
+
+#### Whether the extended reduction held up
+
+**Yes, and more completely than expected: 20 of 20 nights, 36 science frames.**
+
+| | |
+|---|---|
+| orders | 37 on 35 of 36 frames (1998-09-13 gave 34) |
+| wavelength RMS, nightly median | 0.108–0.146 px across nine months |
+| recipe changes | none |
+
+The three phase-1 parameters were not touched, and they survived both the
+nine-month baseline and the change of decker: **1998-09-17 reduced through B2
+with the parameters unchanged**, indistinguishable from the B1 nights. The
+decker was never the problem — that night had no B2 arc, and only three exist
+in the whole era.
+
+What did *not* hold up was the assumption that calibrations could be selected
+from archive metadata. Four traps, each of which broke the reduction before it
+was found:
+
+1. **Clean B1 flats exist on only 5 of 21 nights.** The programme flat-fielded
+   through the wider B2 decker as a matter of course. Phase 1's borrowed flats
+   were the general case, not a July quirk.
+2. **Five of 1998-08-12's eighteen B1 "flats" are empty frames** — cover shut,
+   mean 768 counts against 17,400. Clean by every KOA column.
+3. **`TARGNAME = 'H187123'`** — one stray character in 1998 silently removed
+   the era's most important night from the reduction.
+4. **`RED97`** — PypeIt rewrites the cross-disperser by date, so no 1998
+   calibration can ever reach a 1997 night, regardless of angles.
+
+December 1997 needed a deliberate intervention: its own iodine-in B1 flat
+forced as a trace frame, with pixel and illumination flatting switched off.
+`order_shift.py` justified it by measurement — the December arcs sit **1 binned
+pixel** from July's at correlation 0.99, closer than nights PypeIt accepts
+without complaint. Those two nights are the only ones not flat-fielded like the
+rest, and anything comparing them must know it.
+
+#### The state of the template
+
+**Good, and better than the individual frames by the full theoretical factor.**
+
+| | |
+|---|---|
+| S/N per pixel | **310 median**, 104–346 |
+| gain over one exposure | **1.72** against √3 = 1.73 |
+| iodine region (orders 57–71) | S/N 320–346 |
+
+Three independent checks passed. The cell-out claim is confirmed *internally* —
+91.7 absorption minima per 100 Å in the I2 band against 313.0 for a cell-in
+frame of the same night, with a blue control window agreeing to 1%. The G2V
+expectation holds: all ten canonical features at sensible depths, a velocity
+zero point 1.33 km/s from expectation (matching phase 1's known offset), and
+weak-line widths giving R ≳ 40,200. And against the 1997-12-24 cell-out frame,
+eight months earlier and across the `RED97` boundary, 31 orders correlate at
+0.992 with a velocity offset of 160 ± 70 m/s.
+
+**What it is not:** a `StellarTemplate`. `pyodine` wants the template
+deconvolved against the instrumental profile. This is the co-added observation.
+
+#### The state of the atlas
+
+**Settled, which it was not when this document was written.** The Fischer atlas
+is real, public, MIT-licensed, covers 4980–6250 Å vacuum on a
+wavenumber-uniform FTS grid at R ≈ 600,000–680,000, and carries **no metadata
+whatsoever**.
+
+The document's own prediction was exactly right: positions transfer, depths do
+not.
+
+| | |
+|---|---|
+| line positions vs the measured HIRES cell | correlation **0.928** |
+| depths | HIRES is **2.6× optically thicker** |
+| is one exponent enough? | yes — α = 2.59, spread 2.28–2.86 |
+
+So the two cells differ in column density and not in temperature, and the atlas
+becomes a HIRES atlas under T → T^2.59. The 1998-08-12 pair settled this
+empirically, exactly as the document hoped it might.
+
+#### Specific list of what phase 3 needs
+
+**Environment and vendoring**
+
+1. Vendor `pyodine` at commit `4488b0914fe5b272b787982647691045bff2604a`,
+   recorded, not `pip install`ed from a moving target.
+2. Install `h5py` and `barycorrpy` into `pypeit14`. `pyodine` requires both;
+   neither is present, which is why `atlas_check.py` runs in `astro`.
+
+**Changes `pyodine` itself needs for HIRES**
+
+3. **The depth model must become a power law.** `models/spectrum.py:93` applies
+   `iod_depth` linearly, `T → 1 + d(T−1)`. The physics is Beer–Lambert,
+   `T → T^α`. At the α = 2.6 HIRES needs, **5.8% of the atlas goes to negative
+   transmission**. The fix is one line, `flux_iod ** params['iod_depth']`, and
+   it reduces to the present behaviour for weak lines. *This is the single
+   change phase 3 cannot proceed without.*
+4. **The atlas must be read on the vacuum grid.** `IodineTemplate` reads
+   `wavelength_air`; PypeIt reports vacuum; the difference is 83 km/s and drops
+   the correlation from +0.90 to +0.08. Already handled in `utilities_hires`.
+5. **Two `components.py` docstrings are wrong and fail silently.** `bary_date`
+   is a full JD(UTC), not a "Barycentric Reduced Julian Date" (line 315);
+   `bary_vel_corr` is m/s, not km/s (line 316). Worth a patch in the vendored
+   copy so the next reader is not caught.
+6. `pyodine`'s `compute_weight` offers flat and dop-code weights and knows
+   nothing of a propagated inverse variance. `utilities_hires` supplies one;
+   whether `pyodine` uses it needs checking in the chunk fitting.
+
+**Work still to do**
+
+7. **Deconvolve the template** against the instrumental profile.
+8. **Write the other four `utilities_hires` files**: `conf.py`,
+   `pyodine_parameters.py`, `timeseries_parameters.py`, `logging.json`.
+9. **Settle the gain question.** Headers give `CCDGN01` = 4.8 e⁻/ADU and
+   `CCDRN01` = 6.0 e⁻ against PypeIt's hard-coded 1.9 and 2.8. The inverse
+   variance in the spec1d files is on PypeIt's scale, so the weights are
+   internally consistent, but the *relative* weighting of bright and faint
+   pixels depends on it.
+10. **Re-reduce with `refframe = observed`** so the products are honest, rather
+    than relying on the adapter to undo a heliocentric correction. The adapter's
+    unconditional division makes this optional, not urgent.
+11. **Carry the known floors**: ~1 m/s from the geometric-versus-flux-weighted
+    midpoint (no exposure meter in 1998), and the December nights' missing
+    pixel flat.
+
+**Two useful tests phase 3 already has**
+
+12. 1998-07-19 and 1998-09-17 are 1.5–2.4 km/s off on borrowed arcs. A forward
+    model derives its own wavelength solution from the I2 lines and should
+    recover both. If it does not, phase 3 is not working.
+13. The 30 matched catalogue epochs at 1.2 m/s are the target to be scored
+    against.
+
+#### Should the nine upstream items go to Ryan Cooke now?
+
+**Yes — and the list is now eleven, not nine.** Phase 1 deferred the report
+because it was mid-reduction and the items were still accumulating. That
+condition has ended: the reduction is complete over twenty nights and nine
+months, every item has been exercised across 36 frames rather than one, and no
+new PypeIt bug has appeared since prompt 3. Waiting longer adds nothing and
+risks the details going stale.
+
+The nine phase-1 items stand as written. Phase 2 adds two, both in
+`pypeit/core/wave.py` and both affecting every PypeIt user who takes the
+default, not just HIRES:
+
+**10. `geomotion_velocity` has a sign error on the solar term.** Line 89 does
+`velocity += sv` for the heliocentric frame where the observer's velocity
+relative to the Sun is `ev + ov − sv`. Recomputing both ways against
+`astropy.radial_velocity_correction`: the `−` form matches to −0.00 m/s, the
+`+` form is **+13.09 m/s** out. The error is twice the solar term, it does not
+cancel, and it drifts **5.16 m/s** across nine months. `refframe = heliocentric`
+is the **default**, so this is silently applied unless a user overrides it.
+
+**11. `geomotion_correct` omits the relativistic terms**, leaving barycentric
+velocities **4.6 m/s** off `astropy`'s — the solar gravitational redshift
+(+2.91 m/s) and the observer's time dilation (+1.43 m/s). Nearly constant, so
+harmless for relative velocities, but wrong for an absolute one.
+
+Both are reproducible from `first_hires_exoplanet/refframe_audit.py`, which
+should go with the report.
+
+Three further observations are worth sending as usability notes rather than
+bug reports, since each cost real time:
+
+- **"No frames of type=trace provided" names the symptom, not the cause.** In
+  all three cases here the cause was frames PypeIt had declined to frametype —
+  cover-closed flats it was right to reject — and the message pointed nowhere
+  near them. Naming the rejected candidates would have saved hours.
+- **The `RED97` rule deserves a citation in the code.** `keck_hires.py:245`
+  overrides a header value on the MAKEE DRP's authority with a comment but no
+  reference. It is a hard configuration key and it silently partitions the
+  archive at 1997-12-31. Our measurement found December's orders 1 binned pixel
+  from July's at correlation 0.99, which does not contradict a cross-disperser
+  swap but is worth someone knowing.
+- **`refframe` is load-bearing and invisible.** Nothing in the reduction inputs
+  records that a 4 km/s shift was applied; the only trace is `VEL_TYPE` and
+  `VEL_CORR` in the spec1d extensions.
+
+Ryan Cooke is a collaborator and a co-author, and items 7 and 8 from phase 1 —
+a silent failure that reads as success, and `-o` appending rather than
+replacing — are data-integrity issues that matter to other people now. **Send
+the report.**
+
+#### Did phase 2 meet its own success criterion?
+
+The document set one: *"Phase 2 succeeds when we have velocities for every
+discovery-era epoch with honest uncertainties, a quality-filtered spectrum set,
+and a written statement of exactly what `pyodine` still needs."*
+
+- **Velocities for every discovery-era epoch**: 36 of 36. ✓
+- **Honest uncertainties**: yes, and the honesty is the point — the formal
+  2.9 m/s and empirical 10.4 m/s are both reported and both explicitly
+  disclaimed against the 702 m/s that actually matters. ✓
+- **A quality-filtered spectrum set**: 1329 order-spectra, 11.3% rejected, in
+  `data/order_quality.csv`. ✓
+- **A written statement of what `pyodine` still needs**: the thirteen items
+  above. ✓
+
+All four. Phase 2 is complete.
+
+
 ## Logs
 
 ### 2026-09-22 (Prompt 1: settled the reference frame — and found a sign error in PypeIt's heliocentric correction)
@@ -1939,5 +2339,144 @@ loads the atlas on the **air** wavelength grid while PypeIt reports vacuum, an
 - `docs/figs/fig_p2_atlas.png`
 - `../first-hires-exoplanet-data/atlas/Fischer_Cell_May2022_downsampled3.h5`
   (data tree, not the repo)
+
+**No git command changed state.**
+
+### 2026-09-23 (Prompt 8: the pyodine input adapter, and the catalogue's "BJD" is not a BJD)
+
+**Task.** Prompt 8 of this document: write the `pyodine` input adapter --
+a module presenting a PypeIt spec1d as the `(nord, npix)` flux, weights,
+wavelengths, `bary_date` and `bary_vel_corr` that `ObservationWrapper` expects,
+following prompt 1 on reference frames and prompt 2 on quality; modelled on
+`utilities_lick/load_pyodine.py`; no forward model. Full findings are in the
+Report section above.
+
+**What was done.**
+
+- Wrote `first_hires_exoplanet/utilities_hires/` (`__init__.py`,
+  `load_pyodine.py`, `__main__.py`), laid out like `pyodine`'s own
+  `utilities_lick/` so it drops into a vendored tree unchanged.
+- All 36 epochs load and every contract check passes.
+
+**Headline results.** 37 x 2048 rectangular arrays (34 for 1998-09-13),
+observed frame with `VEL_CORR` divided out to 1e-6 km/s, `bary_date` a full
+JD(UTC) at the midpoint, `bary_vel_corr` in m/s spanning -12677 to +11581,
+150 of 1329 order-spectra zero-weighted and all 1329 still loadable.
+
+**What this taught us about the repository and the data.**
+
+- **Zeroing bad data can be worse than flagging it.** The obvious way to apply
+  prompt 2's flags is to zero the flux of a rejected order. `pyodine`'s
+  `components.Spectrum.__init__` raises `NoDataError` when `not any(flux)`, so
+  that would turn "ignore this order" into "this file cannot be opened". The
+  flux is left intact and only the weight is zeroed. Reading the constructor of
+  the class we are feeding was what caught it.
+- **The adapter should not depend on PypeIt, and does not need to.** Prompt 7
+  had already shown a spec1d can be read with plain `astropy.io.fits`. Doing
+  the same here means `utilities_hires/` can live inside a vendored `pyodine`
+  with no dependency on this project at all, which is what an instrument
+  adapter should be.
+- **Making the dependency optional made the work testable now.** `pyodine` is
+  not installed and prompt 8 is not the place to vendor it, so the classes
+  subclass `pyodine.components` when importable and fall back to equivalent
+  stand-ins when not. The alternative -- write it blind and check it in phase 3
+  -- would have deferred every one of the errors the self-check caught.
+- **The Teklu et al. catalogue's "BJD" column is JD(UTC), not a barycentric
+  Julian date.** Comparing our `bary_date` against it, the difference sits flat
+  at -1.0 to -2.6 s while the Roemer delay over the same epochs swings -228 to
+  +286 s and TDB-UTC is a constant +63.2 s. A true BJD would track the Roemer
+  delay. This cuts both ways: it independently validates the adapter's
+  `bary_date` to about 2 s against a source that had nothing to do with it, and
+  it warns that the column is up to 8 minutes from a real BJD. At P = 3.097 d
+  that is 0.001 in phase and ~0.5 m/s, so prompt 6's conclusions stand, but a
+  phase-3 analysis should not use that column as a BJD. It also explains why
+  prompt 6's time matching was good to 0.1 minutes rather than the several
+  minutes a BJD-vs-JD comparison would have given -- which, in hindsight, was
+  the tell.
+- **Both of `components.py`'s docstrings for these two fields are wrong, and
+  both would fail silently.** `bary_date` as a reduced BJD would put the
+  observation in 1858 and `bary_vel_corr` in km/s would be out by a thousand.
+  Neither raises; both just produce nonsense. They are worth re-checking
+  against the consuming code whenever `pyodine` is updated.
+- **A `python -m package.module` self-check double-imports if the package
+  `__init__` already imported it.** A `__main__.py` is the clean entry point.
+
+**Files added.**
+
+- `first_hires_exoplanet/utilities_hires/__init__.py`
+- `first_hires_exoplanet/utilities_hires/load_pyodine.py`
+- `first_hires_exoplanet/utilities_hires/__main__.py`
+
+**No git command changed state.**
+
+### 2026-09-23 (Prompt 9: phase-2 assessment -- complete, and the upstream report should go)
+
+**Task.** Prompt 9 of this document: write the phase-2 assessment -- what the
+cross-correlation achieved and what it cost, whether the extended reduction
+held up, the state of the template and the atlas, a specific list of what phase
+3 needs including anything in `pyodine` that must change for HIRES, and a
+decision on whether the nine upstream items from phase 1 should go to Ryan
+Cooke now. The assessment is in the Report section above.
+
+**What was done.**
+
+- Re-read the phase-1 upstream list (nine items, `data_phase1_prompt.md:1021`)
+  and every phase-2 Report section.
+- Re-derived every headline number from the committed products rather than from
+  the conversation: `redux/run_summary.json`, `data/order_quality.csv`,
+  `data/xcorr_velocities.csv`, `data/template_snr.csv`. All matched.
+- Wrote the assessment, including thirteen specific phase-3 requirements and a
+  decision on the upstream report.
+
+**Verdict.** Phase 2 succeeded, and met all four of the success criteria the
+document set itself. The cross-correlation reached 702 m/s against a 72 m/s
+planet -- a clean, predicted non-detection -- but the per-order scatter of
+47 m/s within a single exposure localises the entire deficit in the wavelength
+zero point, which is the measured case for phase 3 that the document was
+written to produce.
+
+**Decision on the upstream report: send it, and it is eleven items, not nine.**
+Phase 1 deferred because the list was still growing mid-reduction. That
+condition has ended -- twenty nights are reduced, every item has been exercised
+across 36 frames, and no new PypeIt bug has appeared since prompt 3. Phase 2
+adds two, both in `pypeit/core/wave.py`, both affecting any user who takes the
+default `refframe = heliocentric`: the sign error on the solar term (+13.09 m/s,
+drifting 5.16 m/s over nine months) and the omitted relativistic terms
+(-4.6 m/s, near-constant). Three usability notes go with them.
+
+**What this taught us about the repository and the data.**
+
+- **The document's own reframing was the most valuable decision in phase 2.**
+  It was titled for cross-correlation velocities and then argued that
+  cross-correlation is the instrument rather than the deliverable. Everything
+  that made phase 2 worth doing -- the twenty-night reduction, the template, the
+  atlas, the adapter -- follows from having taken that seriously instead of
+  chasing a velocity result that was never reachable.
+- **Writing the assessment from the committed tables rather than from the
+  session was worth the extra step.** Every number checked out, which is itself
+  the useful result: it means the products on disk say what the Reports say
+  they say, and a reader six months from now can reproduce the assessment
+  without this conversation.
+- **The upstream list grew in a specific direction.** Phase 1's nine items are
+  about the original-CCD raw reader and PypeIt's defaults -- things a HIRES user
+  hits. Phase 2's two are in `core/wave.py` and hit everyone. The velocity work
+  was what made them visible, because a 13 m/s error is invisible to anything
+  that is not trying to measure velocities.
+- **Three of phase 2's findings were corrections to phase 1**, not new ground:
+  same-night arcs *are* required (the RMS is not the zero point), the run has
+  many bad order-spectra rather than one, and borrowed flats are the general
+  case rather than a July quirk. A phase that produces no corrections to its
+  predecessor has probably not looked hard enough.
+- **The recurring failure mode across all nine prompts was a plausible-looking
+  wrong answer**, not a crash: a +37 km/s annual curve from a sign error, a
+  perfect +0.00 km/s agreement from quantisation, a 111 km/s line width from an
+  estimator measuring its own window, an 8 km/s velocity error from comparing
+  against the wrong frame, blank flats that were clean by every archive column.
+  Every one was caught by asking whether the magnitude was physically possible,
+  or by an independent check that shared no machinery with the first. That is
+  the habit to carry into phase 3, where the forward model will have far more
+  ways to look right.
+
+**Files changed.** `claude_prompts/data_phase2_prompt.md` only.
 
 **No git command changed state.**
