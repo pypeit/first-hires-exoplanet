@@ -12,6 +12,7 @@ WHAT `pyodine` EXPECTS, and where each answer comes from:
   ``wave``           (nord, npix)   `OPT_WAVE`, divided by `VEL_CORR`
   ``cont``           (nord, npix)   running upper percentile of the flux
   ``weight``         (nord, npix)   inverse variance, zeroed where unusable
+                                   (also per order as ``Spectrum.ivar``)
   ``bary_date``      scalar         full JD(UTC) at the exposure midpoint
   ``bary_vel_corr``  scalar         barycentric correction in **m/s**
   ``nord``, ``npix``, ``instrument``, ``star``, ``exp_time``
@@ -67,6 +68,7 @@ Self-check:
 
 # Standard imports
 import os
+import sys
 import glob
 import warnings
 
@@ -78,6 +80,15 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord, EarthLocation
 
 from scipy.ndimage import percentile_filter
+
+# The fork is source, not an installed package (see `vendor/README.md`), so it
+# is imported by path as pyodine's own tutorial recommends.  Phase 2 wrote this
+# module before the fork existed and fell back to stand-ins; since phase 3
+# prompt 1 vendored it, the real classes are what these subclass.
+_VENDOR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), 'vendor', 'pyodine')
+if os.path.isdir(_VENDOR) and _VENDOR not in sys.path:
+    sys.path.insert(0, _VENDOR)
 
 try:                                                # pragma: no cover
     from pyodine import components
@@ -376,7 +387,13 @@ class ObservationWrapper(_ObsBase):
         flux, wave, cont, weight, orders, header = load_file(filename, quality)
 
         self._flux, self._wave, self._cont, self._weight = flux, wave, cont, weight
-        self.orders = orders
+        # NOT `self.orders`: `components.MultiOrderSpectrum` defines that as a
+        # read-only property giving *positions* (0..nord-1), which is what
+        # pyodine's loops index with.  Phase 2 wrote this against a stand-in
+        # base class and reused the name for the echelle order NUMBERS (57-93);
+        # the collision only surfaced when phase 3 prompt 2 put the real fork
+        # on the path.  The physical numbers live under their own name.
+        self.ech_orders = orders
         self.nord, self.npix = flux.shape
 
         self.orig_header = header
@@ -433,6 +450,9 @@ class ObservationWrapper(_ObsBase):
         """
         if isinstance(order, (int, np.integer)) or hasattr(order, '__int__'):
             i = int(order)
+            if HAVE_PYODINE:                        # pragma: no cover
+                return _SpectrumCls(self._flux[i], wave=self._wave[i],
+                                    cont=self._cont[i], ivar=self._weight[i])
             return _SpectrumCls(self._flux[i], wave=self._wave[i],
                                 cont=self._cont[i])
         if isinstance(order, (list, np.ndarray)):
@@ -443,7 +463,7 @@ class ObservationWrapper(_ObsBase):
 
     def index_of(self, ech_order):
         """ Position in the arrays of a given echelle order number. """
-        hits = np.where(self.orders == int(ech_order))[0]
+        hits = np.where(self.ech_orders == int(ech_order))[0]
         if len(hits) != 1:
             raise IndexError('Order {:d} is not in {:s}'.format(
                 int(ech_order), self.koaid))
@@ -452,14 +472,19 @@ class ObservationWrapper(_ObsBase):
     def compute_weight(self, weight_type='inverse-variance', rel_noise=0.008):
         """ Pixel weights.
 
-        `pyodine`'s own version offers 'flat' (ones) and 'inverse'
+        `pyodine` originally offered 'flat' (ones) and 'inverse'
         (1/(f(1+f*rel_noise^2)), from the dop code).  Neither knows that PypeIt
         has already propagated a full inverse variance through the extraction,
         nor that prompt 2 rejected 11% of order-spectra.  The default here is
         that inverse variance, with rejected orders and masked pixels at zero;
         the two `pyodine` options remain available for comparison.
+
+        Phase 3 prompt 2 taught the fork the same thing, where it is spelled
+        ``ivar``.  That spelling is accepted here too, so the same string
+        means the same array on both sides of the boundary; the longer name
+        this module was written with in phase 2 still works.
         """
-        if weight_type == 'inverse-variance':
+        if weight_type in ('inverse-variance', 'ivar'):
             return self._weight.copy()
         if weight_type == 'flat':
             return np.ones_like(self._flux)
@@ -468,12 +493,12 @@ class ObservationWrapper(_ObsBase):
                 w = 1. / (self._flux * (1. + self._flux * rel_noise ** 2))
             return np.where(np.isfinite(w), w, 0.)
         raise NotImplementedError(
-            'Choose one of: "inverse-variance", "flat", "inverse"')
+            'Choose one of: "ivar" (= "inverse-variance"), "flat", "inverse"')
 
     @property
     def usable_orders(self):
         """ Echelle order numbers with any non-zero weight. """
-        return self.orders[np.any(self._weight > 0, axis=1)]
+        return self.ech_orders[np.any(self._weight > 0, axis=1)]
 
     def __repr__(self):
         return ('<HIRES {:s}  {:d} orders x {:d} pix  {:.0f} s  '
@@ -513,16 +538,22 @@ class IodineTemplate(_AtlasBase):
         self.orig_filename = iodine_cell
         with h5py.File(iodine_cell, 'r') as h:
             flux = np.array(h['flux_normalized'], dtype=float)
-            wave = np.array(h['wavelength'], dtype=float)   # VACUUM
+            # 'wavelength' is the vacuum grid; 'wavelength_air' is the one
+            # upstream's adapters read.  Phase 3 prompt 2 gave the fork's
+            # `IodineAtlas` a recorded `wave_frame` so that the choice is
+            # visible to anything downstream instead of being implicit here.
+            wave = np.array(h[components.IodineAtlas.WAVE_FRAMES['vacuum']]
+                            if HAVE_PYODINE else h['wavelength'], dtype=float)
 
         self.alpha = ATLAS_ALPHA if scale_depth else 1.0
         if scale_depth:
             flux = np.clip(flux, 0., None) ** self.alpha
 
         if HAVE_PYODINE:                            # pragma: no cover
-            super().__init__(flux, wave)
+            super().__init__(flux, wave, wave_frame='vacuum')
         else:
             self.flux, self.wave, self.cont = flux, wave, None
+            self.wave_frame = 'vacuum'
 
     def __repr__(self):
         return '<IodineTemplate {:.1f}-{:.1f} A vacuum, alpha={:.2f}>'.format(
@@ -595,7 +626,7 @@ def _self_check(redux_dir=DEFAULT_REDUX):           # pragma: no cover
             try:
                 o[k]
             except Exception as exc:
-                bad.append((o.koaid, int(o.orders[k]), str(exc)))
+                bad.append((o.koaid, int(o.ech_orders[k]), str(exc)))
     print('    every order still loadable    : {!s}{:s}'.format(
         not bad, '' if not bad else '  <- {:d} failed'.format(len(bad))))
     ok &= not bad

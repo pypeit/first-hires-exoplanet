@@ -438,6 +438,155 @@ One smaller thing worth knowing for prompts 5 and 7: `load_results` on an
 of length `n_chunks` — not the list of result objects the tutorial's `dill`
 path produces. The tutorial only ever shows the `dill` form.
 
+### Prompt 2: five changes to the fork, five tests, and one that was not asked for
+
+**What changed, and what each is worth.** Six units of work, each with its own
+test file, each test written and run *before* the change and shown to fail for
+the right reason.
+
+| # | change | files in the fork | test | HIRES-specific? |
+|---|---|---|---|---|
+| 0 | NumPy 2 compatibility | `lib/misc.py`, `fitters/lmfit_wrapper.py` | `test_fork_numpy2.py` | **no** — upstream |
+| 1 | Beer-Lambert iodine depth | `models/spectrum.py` | `test_fork_iodine_depth.py` | **no** — upstream |
+| 2 | recorded atlas wavelength frame | `components.py` | `test_fork_atlas_frame.py` | mechanism no, choice yes |
+| 3 | `bary_*` units, documented and guarded | `components.py` | `test_fork_bary_units.py` | **no** — upstream |
+| 4 | `compute_weight` takes an inverse variance | `components.py` | `test_fork_weights.py` | **no** — upstream |
+| 5 | adapter contract repair | — (ours) | `test_fork_adapter_contract.py` | **yes** — ours alone |
+
+34 tests pass. `vendor_pyodine.py --verify` reports **145 files identical to
+upstream and four changed**, which is the whole diff and is exactly the four
+intended.
+
+**Change 0 was not on the list and had to come first.** Prompt 1 established
+that `np.float` (`lib/misc.py`, three sites) and `np.NaN`
+(`fitters/lmfit_wrapper.py`, five) stop the code dead against NumPy 2, and
+prompt 1 was forbidden from fixing them. Nothing else in this prompt could be
+tested end to end until they were gone, so they are change 0. The diagnostic
+shim `pyodine_smoke.py` carried for prompt 1 is deleted with them.
+
+**Change 1: `iod_depth` is a column density, not a multiplier.** Upstream
+applied `flux = iod_depth * (flux - 1) + 1` at two places — `eval` and
+`clean_of_I2`, which must agree or the I2-free reconstruction contradicts the
+model. Both now call one helper, `scale_iodine_depth`, which applies
+`clip(flux, 0, None) ** depth`.
+
+The test that matters is the end-to-end one: build a synthetic chunk whose
+atlas has a black line core, evaluate `SimpleModel.eval` at
+`iod_depth = 2.59`, and look at the model flux. Before the change it is
+**−1.012**; after, it cannot go below zero by construction. That is phase 2's
+prediction reproduced inside the fork rather than argued from the source.
+
+Three further properties are pinned because phase 3 depends on them: unit depth
+is exactly the identity; depths compose multiplicatively, so the adapter may
+pre-scale the atlas by `alpha = 2.59` and still let the fit vary `iod_depth`
+around 1 with the two composing exactly; and for weak lines the new form agrees
+with the old to a relative 1e-4, so nothing that was fitting sensibly moves.
+
+**What the change does to a real fit.** The SONG tutorial, same template, only
+the depth model differing:
+
+| | Beer-Lambert | upstream linear |
+|---|---|---|
+| robust per-chunk scatter, epoch 1 | **159.4 m/s** | 163.7 m/s |
+| robust per-chunk scatter, epoch 2 | **159.1 m/s** | 165.7 m/s |
+| median chunk velocity | 1169.6, 1169.7 m/s | 1220.4, 1218.4 m/s |
+| median fitted `iod_depth` | 0.988, 0.985 | 0.975, 0.979 |
+
+So the change is a small improvement on data that did not need it — 3% in
+scatter, and the two epochs agree with each other to 0.3 m/s instead of 2.0 —
+and it moves the velocity zero point by about 50 m/s, common to both epochs and
+therefore largely differential-cancelling. On HIRES, where the cell is 2.6x
+thicker, the old form was not merely suboptimal but unphysical.
+
+**A statistic to distrust.** The *standard deviation* of the per-chunk
+velocities moved 911 → 1483 m/s across this change, which looks like a
+catastrophe and is not one. A handful of chunks fail outright and land
+thousands of m/s away — the worst is −27 km/s — and they dominate the standard
+deviation completely: the same two epochs give 1483 and 961 m/s of standard
+deviation while agreeing on 159.4 and 159.1 m/s of robust scatter. Prompts 5
+and 7 are asked for "per-chunk velocity scatter"; it must be the robust one, or
+the number will describe the failures rather than the fit.
+`first_hires_exoplanet/pyodine_chunk_stats.py` now reports both, with outlier
+counts, for exactly this reason.
+
+**Change 2: an atlas must say which grid it is on.** The fix is *not* to read
+the vacuum grid in the fork — Lick and SONG report air wavelengths and reading
+vacuum would be as wrong for them as air is for us. What was missing is that
+the convention was never recorded, so a mismatch could not be detected. So:
+`IodineAtlas` gains `wave_frame` ('air', 'vacuum', or None), a constructor
+`from_h5(filename, wave_frame)` **with no default** — choosing for the caller
+is the mistake being prevented — and `require_wave_frame`, which raises
+`DataMismatchError` on a mismatch and warns when an atlas does not know. The
+HIRES adapter declares `vacuum`, and the test confirms on the real file that
+the two grids differ by 1.56 A at 5615 A, which is 83 km/s.
+
+**Change 3: the two comments, plus the one check a machine can make.** They now
+read `full Julian Date in UTC (JD(UTC), not BJD)` and `m/s`, which is what
+`timeseries/bary_vel_corr.py` and `chunks.py` actually require. A comment is a
+weak thing to test, so `Observation.check_bary_units()` was added: a reduced
+Julian Date is three orders of magnitude from a full one and is caught, as is a
+barycentric velocity beyond 40 km/s. A correction given in km/s is *not*
+mechanically distinguishable from a small one in m/s — which is precisely why
+the documentation had to be right.
+
+**Change 4: the weights are the inverse variance.** `Spectrum` now carries an
+optional `ivar`, `__getitem__` slices it — a chunk is built as
+`observation[order][pixels]`, so dropping it there would lose it exactly where
+the fit needs it — and `compute_weight` gains `weight_type='ivar'`. Masked,
+negative and non-finite entries return zero weight rather than passing through
+the `sqrt(abs(weight))` in `lmfit_wrapper.py:96` as large ones. Asking for
+`'ivar'` when none was supplied raises rather than silently returning ones.
+`'flat'` and `'inverse'` are untouched.
+
+This is the change that should make reduced chi-square mean something. With
+flat weights the residual is in flux units and prompt 1 measured a median
+reduced chi-square of 150516; with a propagated inverse variance the residual
+is a proper chi. **That is not yet demonstrated on HIRES** — the SONG tutorial
+has no inverse variance to feed it, so the number above is unchanged there, and
+prompt 5 is where it gets tested on our own data.
+
+**Change 5 was not asked for and could not be avoided.** Putting the real fork
+on the path — phase 2's adapter had been subclassing stand-ins — immediately
+raised `AttributeError: property 'orders' has no setter`.
+`components.MultiOrderSpectrum` defines `orders` as a read-only property
+giving *positions* (0..nord-1), which is what `pyodine`'s loops index with,
+while phase 2's adapter had assigned the echelle order *numbers* (57-93) to the
+same name. The physical numbers now live under `ech_orders`; `orders` is
+inherited and means what the fork means by it. Each order also carries its
+inverse variance down to the `Spectrum`, so a chunk sliced out of it is
+weightable on its own.
+
+The adapter self-check passes unchanged against the real fork: full JD,
+bary_vel_corr −12677 to +11581 m/s, 150 of 1329 order-spectra zero-weighted,
+every order still loadable, atlas on vacuum at alpha = 2.59.
+
+**Which of these should go back to the author.** Five of the six, which is more
+than expected:
+
+* **NumPy 2 (change 0)** — urgent and unconditional. `pyodine` does not run at
+  all against any NumPy from 2.0 onward, and fails silently because the
+  pipeline swallows its own exceptions.
+* **Beer-Lambert depth (change 1)** — generally correct physics, backwards
+  compatible near depth 1, and a measured small improvement on the author's own
+  SONG data.
+* **The recorded wavelength frame (change 2)** — the mechanism, not the choice.
+  Upstream's four adapters can keep reading air; what they gain is that a
+  mismatch becomes an exception instead of 83 km/s of nonsense.
+* **The `bary_*` documentation and guard (change 3)** — a pure documentation
+  bug in upstream, and the guard costs nothing.
+* **`compute_weight(weight_type='ivar')` (change 4)** — purely additive.
+  Instruments with no propagated variance leave `ivar` at None and nothing
+  changes for them.
+
+Only the *choice* of the vacuum grid, and change 5, are ours and stay ours.
+
+**On "each as a separate commit".** The work is in six separable units with
+independent tests, but three of them land in `pyodine/components.py` and three
+touch `utilities_hires/load_pyodine.py`, so they cannot be separated with
+`git add <file>` alone. The hunks are contiguous and disjoint, so `git add -p`
+splits them cleanly; the map is in the log entry below. Git remains the user's:
+nothing here was staged or committed.
+
 ## Logs
 
 ### 2026-09-23 (Prompt 1: `pyodine` vendored at a recorded commit; it needs two NumPy 2 fixes before it runs)
@@ -538,3 +687,114 @@ and its outputs, scratch).
 scratch directory outside the repository, and read-only `git ls-files`,
 `git rev-parse`, `git status` and `git check-ignore`. Nothing was staged,
 committed or branched in this repository.
+
+### 2026-09-23 (Prompt 2: the four HIRES changes to the fork, plus the NumPy 2 fix they all depended on)
+
+**Task.** Make the four phase-2 changes to the vendored fork — Beer-Lambert
+depth, vacuum atlas grid, the two `components.py` docstrings, and an inverse
+variance in `compute_weight` — each as a separate commit with a test that fails
+before and passes after, and report which are HIRES-specific. Findings in
+`## Report`, "Prompt 2: five changes to the fork, five tests, and one that was
+not asked for".
+
+**What was done.** Six units, each test written and run against the unchanged
+tree first and shown to fail for the right reason before the change was made.
+In the fork: `lib/misc.py` and `fitters/lmfit_wrapper.py` for NumPy 2;
+`models/spectrum.py` gained `scale_iodine_depth` and both iodine sites now call
+it; `components.py` gained `IodineAtlas.wave_frame` / `from_h5` /
+`require_wave_frame`, corrected `bary_date` and `bary_vel_corr` with a new
+`Observation.check_bary_units`, and an optional `Spectrum.ivar` with
+`compute_weight(weight_type='ivar')`. In the repository: six test files and a
+`conftest.py` under `first_hires_exoplanet/tests/`, a new
+`pyodine_chunk_stats.py`, the removal of `pyodine_smoke.py`'s NumPy shim, and
+repairs to `utilities_hires/load_pyodine.py` (fork on the path, `ech_orders`,
+per-order `ivar`, `'ivar'` accepted alongside `'inverse-variance'`). Ran the
+SONG tutorial end to end after the changes, and again with the depth model
+reverted, to measure what the change actually did.
+
+**Headline results.** 34 tests pass; `--verify` shows four changed files and
+145 identical to upstream. The end-to-end test of the depth model produced
+**−1.012** flux from `SimpleModel.eval` at `iod_depth = 2.59` before the change
+and cannot go negative after. On the SONG tutorial, same template, the new
+depth model gives a robust per-chunk scatter of 159.4 and 159.1 m/s against
+163.7 and 165.7 for upstream's linear form, and shifts the velocity zero point
+by about 50 m/s. The adapter self-check passes against the real fork with
+phase 2's numbers unchanged. Five of the six changes are not HIRES-specific and
+should go upstream.
+
+**What this taught us about the repository and the data.**
+
+*The obvious scatter statistic is the wrong one, and it nearly produced a false
+alarm.* The per-chunk velocity standard deviation moved 911 → 1483 m/s across
+the depth change and looked like a 63% regression. It is not: a few chunks fail
+completely — the worst lands at −27 km/s — and the standard deviation is
+theirs, not the fit's. The same two epochs give 1483 and 961 m/s of standard
+deviation while agreeing to 0.3 m/s on the robust width. Prompts 5 and 7 ask
+for per-chunk scatter by name; reported as a standard deviation the number will
+describe the failures. `pyodine_chunk_stats.py` exists so that both are always
+printed together with an outlier count.
+
+*Phase 2's adapter had a latent contract violation that only the real fork
+could reveal.* `orders` means positions to `pyodine` and echelle numbers to
+phase 2's adapter, and because phase 2 subclassed stand-ins, nothing ever
+compared the two. It raised the moment the fork was on the path — loudly, which
+was luck: had `MultiOrderSpectrum.orders` been a plain attribute rather than a
+property, the assignment would have succeeded and every `pyodine` loop over
+`obs.orders` would have indexed with 57-93 into a 37-order array. The general
+lesson for prompt 4, which writes four more `utilities_hires` files: a
+"drop-in" module that has never been dropped in is a claim, not a fact.
+
+*Fixing `pyodine` for HIRES mostly means fixing `pyodine`.* Only the choice of
+the vacuum grid turned out to be genuinely ours. The depth model, the NumPy 2
+breakage, the mis-documented barycentric units and the absence of any way to
+pass a propagated variance are all defects against any instrument; HIRES merely
+made them visible, because its cell is thick, its pipeline is modern and its
+data is old enough to need a modern NumPy. That is worth stating plainly in the
+prompt-10 report: we are not asking the author to accommodate a special case.
+
+*Reduced chi-square is still not usable, and will not be until prompt 5.* The
+weights change is the one that should fix it, but the SONG tutorial has no
+propagated variance to feed it, so 150516 is still what the tutorial reports.
+The first honest chi-square in this project will come from HIRES data, and if
+it is not of order unity the weights are still wrong.
+
+*A depth model is not a free parameter change.* Making `iod_depth` an exponent
+moved SONG's velocity zero point by 50 m/s. It is common to both epochs and so
+mostly cancels differentially, but it is a reminder that the fork's changes
+have to be finished before any velocity is quoted, not adjusted afterwards.
+
+**Files added / modified.** In the fork: `vendor/pyodine/pyodine/lib/misc.py`,
+`vendor/pyodine/pyodine/fitters/lmfit_wrapper.py`,
+`vendor/pyodine/pyodine/models/spectrum.py`,
+`vendor/pyodine/pyodine/components.py`. Added
+`first_hires_exoplanet/tests/conftest.py`,
+`first_hires_exoplanet/tests/test_fork_numpy2.py`,
+`test_fork_iodine_depth.py`, `test_fork_atlas_frame.py`,
+`test_fork_bary_units.py`, `test_fork_weights.py`,
+`test_fork_adapter_contract.py`, and
+`first_hires_exoplanet/pyodine_chunk_stats.py`. Modified
+`first_hires_exoplanet/pyodine_smoke.py` (shim removed) and
+`first_hires_exoplanet/utilities_hires/load_pyodine.py`.
+
+Suggested commit split, since three changes share `components.py` and three
+share `load_pyodine.py` (`git add -p` separates them; the hunks are disjoint):
+
+1. *NumPy 2*: `lib/misc.py`, `fitters/lmfit_wrapper.py`, `pyodine_smoke.py`,
+   `tests/conftest.py`, `tests/test_fork_numpy2.py`.
+2. *Beer-Lambert depth*: `models/spectrum.py`, `tests/test_fork_iodine_depth.py`,
+   `pyodine_chunk_stats.py`.
+3. *Atlas wavelength frame*: `components.py` (the `IodineAtlas` block,
+   lines ~314-400), `load_pyodine.py` (the fork-on-path and `IodineTemplate`
+   hunks), `tests/test_fork_atlas_frame.py`.
+4. *Barycentric units*: `components.py` (the two declarations and
+   `check_bary_units`), `tests/test_fork_bary_units.py`.
+5. *Inverse-variance weights*: `components.py` (`Spectrum.__init__`,
+   `__getitem__`, `compute_weight`), `load_pyodine.py` (the `'ivar'` alias and
+   per-order `ivar`), `tests/test_fork_weights.py`.
+6. *Adapter contract*: `load_pyodine.py` (`ech_orders`),
+   `tests/test_fork_adapter_contract.py`.
+
+**Whether any git command changed state.** No. Read-only `git ls-files` and
+`git rev-parse` inside `vendor_pyodine.py --verify`, which clones upstream into
+a scratch directory outside the repository. Nothing was staged or committed
+here; the commit split above is a suggestion for the user to apply.

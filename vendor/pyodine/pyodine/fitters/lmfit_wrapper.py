@@ -152,7 +152,7 @@ class LmfitWrapper(Fitter):
                 else:
                     return np.nanstd(self.residuals/self.fitted_spectrum.flux)
             else:
-                return np.NaN
+                return np.nan
 
         @property
         def params(self):
@@ -160,7 +160,7 @@ class LmfitWrapper(Fitter):
             if self.lmfit_result is not None:
                 return LmfitWrapper.convert_params(self.lmfit_result.params, from_lmfit=True)
             else:
-                return ParameterSet({p: np.NaN for p in self.model.all_param_names})
+                return ParameterSet({p: np.nan for p in self.model.all_param_names})
 
         @property
         def errors(self):
@@ -169,7 +169,7 @@ class LmfitWrapper(Fitter):
                 lp = self.lmfit_result.params
                 return {p: lp[p].stderr for p in lp}
             else:
-                return {p: np.NaN for p in self.model.all_param_names}
+                return {p: np.nan for p in self.model.all_param_names}
 
         @property
         def init_params(self):
@@ -186,7 +186,7 @@ class LmfitWrapper(Fitter):
                 return params
             else:
                 return ParameterSet(
-                    {p: np.NaN for p in self.model.all_param_names}
+                    {p: np.nan for p in self.model.all_param_names}
                 )
 
         @property
@@ -203,7 +203,7 @@ class LmfitWrapper(Fitter):
             if self.lmfit_result is not None:
                 return self.lmfit_result.redchi
             else:
-                return np.NaN
+                return np.nan
 
         @property
         def neval(self):

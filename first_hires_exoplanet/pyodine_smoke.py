@@ -27,14 +27,12 @@ The observation stage is the slow one, so `--n-obs` limits how many of the 20
 tutorial observations are modelled; two is enough to show the machinery works
 and keeps a re-run to a few minutes.
 
-As shipped, the code does not get past the template stage in this environment:
-it calls `np.float` and `np.NaN`, aliases NumPy removed in 2.0, and `pypeit14`
-has NumPy 2.5.  `--numpy-shim` restores those two names at runtime, from here,
-so that the rest of the tutorial can be probed for further breakage without
-editing the fork -- prompt 1 is explicitly forbidden from changing the vendored
-code, and the real fix belongs in prompt 2.  The shim is diagnostic scaffolding
-and should be deleted once the fork is patched; it is deliberately not the
-default, so that a plain run keeps reporting the honest as-shipped state.
+As shipped, the code did not get past the template stage in this environment:
+it called `np.float` and `np.NaN`, aliases NumPy removed in 2.0, against the
+NumPy 2.5 in `pypeit14`.  Prompt 1 established that with a runtime shim and
+prompt 2 fixed it in the fork, so this script now runs it straight.  Its job
+from here is regression: the SONG tutorial is the only end-to-end check the
+fork has, and every HIRES change has to leave it passing.
 
 A word on how failure looks here.  `create_template` and
 `model_single_observation` each wrap their whole body in `except Exception`,
@@ -112,11 +110,6 @@ TARBALLS = {
 #: SIMBAD identifier of the tutorial star, for the barycentric correction
 TUTORIAL_STAR = 'HIP96100'
 
-#: NumPy names the fork uses that NumPy 2 removed, and their replacements.
-#: `misc.py` uses `np.float` (three sites) and `lmfit_wrapper.py` `np.NaN`
-#: (five); a tree-wide grep finds no others.
-NUMPY_SHIM = {'float': float, 'NaN': float('nan')}
-
 #: Width of the label column in the printed report
 _LABEL = 14
 
@@ -136,20 +129,6 @@ def add_vendor_to_path():
     """
     if str(VENDOR_DIR) not in sys.path:
         sys.path.insert(0, str(VENDOR_DIR))
-
-
-def apply_numpy_shim():
-    """ Restore the NumPy 2 casualties, at runtime, for diagnosis only.
-
-    See the module docstring: this exists so that prompt 1 can find out what
-    *else* is broken without touching the vendored tree.  It is not a fix.
-    """
-    import numpy as np
-
-    for name, value in NUMPY_SHIM.items():
-        setattr(np, name, value)
-    print(f'  numpy shim active: np.{", np.".join(NUMPY_SHIM)} '
-          f'(diagnostic only -- the fix belongs in prompt 2)')
 
 
 def unpack_tutorial_data():
@@ -422,9 +401,6 @@ def parse_args(options=None):
     parser.add_argument('--stages', type=str, default='all',
                         help='comma-separated subset of imports,template,'
                              'observations,velocities; default all')
-    parser.add_argument('--numpy-shim', action='store_true',
-                        help='restore np.float and np.NaN at runtime, to see '
-                             'what breaks beyond them (diagnostic, not a fix)')
     parser.add_argument('--clean', action='store_true',
                         help='delete previous tutorial outputs first')
     return parser.parse_args() if options is None else parser.parse_args(options)
@@ -445,8 +421,6 @@ def main(options=None):
     """
     args = parse_args(options)
     add_vendor_to_path()
-    if args.numpy_shim:
-        apply_numpy_shim()
 
     if args.clean:
         for sub in ('temp_results', 'obs_results', 'vel_results'):

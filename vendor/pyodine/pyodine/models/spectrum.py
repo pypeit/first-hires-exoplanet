@@ -7,6 +7,36 @@ from ..lib.misc import rebin, osample
 from .base import DynamicModel, ParameterSet
 
 
+def scale_iodine_depth(flux, depth):
+    """Scale the depth of the normalized iodine atlas
+    
+    The I2 cell in the beam and the cell that was scanned to make the atlas
+    need not hold the same column density of iodine. For a different column
+    the transmission follows Beer-Lambert, T -> T**depth, so `depth` is a
+    ratio of column densities: 1.0 leaves the atlas untouched, and larger
+    values deepen every line in the way a thicker cell would.
+    
+    For weak lines this agrees to first order with a linear scaling of line
+    depth, depth * (T - 1) + 1, which is what earlier versions applied; for
+    strong ones it does not, and the linear form is unphysical. The Fischer
+    atlas reaches T = 0.000, and a saturated line scaled linearly by the 2.59
+    that Keck/HIRES requires returns T = -1.59. Transmission cannot be
+    negative.
+    
+    :param flux: Normalized transmission of the iodine atlas.
+    :type flux: ndarray[nr_pix]
+    :param depth: The column density, relative to the atlas.
+    :type depth: float
+    
+    :return: The rescaled transmission.
+    :rtype: ndarray[nr_pix]
+    """
+    
+    # Interpolation of a sampled atlas can undershoot slightly below zero;
+    # a negative base raised to a non-integer power is a NaN, so clip first.
+    return np.clip(flux, 0., None) ** depth
+
+
 class SimpleModel(DynamicModel):
     """A working implementation of a :class:`DynamicModel`
     
@@ -90,7 +120,7 @@ class SimpleModel(DynamicModel):
         flux_iod = iod.flux / np.mean(iod.flux)
         
         # Scale depth of iodine atlas
-        flux_iod = params['iod_depth'] * (flux_iod - 1.0) + 1.0
+        flux_iod = scale_iodine_depth(flux_iod, params['iod_depth'])
         
         # Interpolate iodine atlas to the fine grid
         # (Extrapolation may happen, but if keyword `require` is set to 'full',
@@ -236,7 +266,7 @@ class SimpleModel(DynamicModel):
         flux_iod = iod.flux / np.mean(iod.flux)
 
         # Scale depth of iodine atlas
-        flux_iod = params['iod_depth'] * (flux_iod - 1.0) + 1.0
+        flux_iod = scale_iodine_depth(flux_iod, params['iod_depth'])
 
         # Interpolate iodine atlas to the fine grid
         # (Extrapolation may happen, but if keyword `require` is set to 'full',

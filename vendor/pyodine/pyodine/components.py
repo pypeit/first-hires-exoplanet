@@ -35,14 +35,19 @@ class Spectrum:
     :type wave: ndarray[nr_pix], or None
     :param cont: Continuum values of the spectrum.
     :type cont: ndarray[nr_pix], or None
+    :param ivar: Inverse variance of the flux, as propagated by the reducing
+        pipeline. Optional: instruments whose pipelines do not supply one
+        simply leave it None and weight by flux instead.
+    :type ivar: ndarray[nr_pix], or None
     
     """
-    def __init__(self, flux, wave=None, cont=None):
+    def __init__(self, flux, wave=None, cont=None, ivar=None):
         if not any(flux):
             raise NoDataError('Invalid flux vector!')
         self.flux = flux
         self.wave = wave
         self.cont = cont
+        self.ivar = ivar
 
     def __len__(self):
         """The dedicated length-method
@@ -65,7 +70,10 @@ class Spectrum:
         flux = self.flux[pixels]
         wave = self.wave[pixels] if self.wave is not None else None
         cont = self.cont[pixels] if self.cont is not None else None
-        return Spectrum(flux, wave=wave, cont=cont)
+        # A chunk is built as observation[order][pixels], so an inverse
+        # variance dropped here would be missing exactly where the fit wants it
+        ivar = self.ivar[pixels] if self.ivar is not None else None
+        return Spectrum(flux, wave=wave, cont=cont, ivar=ivar)
 
     def check_wavelength_range(self, wave_start, wave_stop):
         """Check the fraction of wavelength range as supplied by the input
@@ -160,9 +168,21 @@ class Spectrum:
         weights. This has been included in analogy to the dop-code by D. Fisher,
         but it is not well-tested here!
         
+        If weight_type='ivar' is used, the inverse variance carried by the
+        spectrum is returned as it stands. That is the right weighting when
+        the reducing pipeline has propagated a real variance through bias,
+        flat, sky and extraction, as PypeIt does; it is also what makes the
+        fit's reduced chi-square meaningful, since the residual in
+        :func:`fitters.lmfit_wrapper.LmfitWrapper.fit` is built as
+        (model - flux) * sqrt(abs(weight)). Pixels with no information --
+        masked ones, which arrive with zero inverse variance, and any negative
+        or non-finite entry -- are returned with zero weight rather than
+        allowed through the absolute value as large ones.
+        
         :param weight_type: The type of weights to compute. Either 'flat' for 
-            flat weights (all ones, default), or 'inverse' for inversely 
-            weighted by flux (as in dop-code, D. Fisher, Yale University).
+            flat weights (all ones, default), 'inverse' for inversely 
+            weighted by flux (as in dop-code, D. Fisher, Yale University), or
+            'ivar' for the propagated inverse variance.
         :type weight_type: str
         :param rel_noise: The relative noise as measured in a flatfield. Only
             required if using weight_type='inverse'.
@@ -176,8 +196,16 @@ class Spectrum:
             return np.ones(self.flux.shape)
         elif weight_type == 'inverse':
             return 1./(self.flux * (1. + self.flux * rel_noise**2))
+        elif weight_type == 'ivar':
+            if self.ivar is None:
+                raise NoDataError(
+                    'No inverse variance in this spectrum; the reduction must '
+                    'supply one for weight_type="ivar"')
+            ivar = np.asarray(self.ivar, dtype=float)
+            return np.where(np.isfinite(ivar) & (ivar > 0.), ivar, 0.)
         else:
-            raise NotImplementedError('Choose one of: "flat", "inverse"')
+            raise NotImplementedError(
+                    'Choose one of: "flat", "inverse", "ivar"')
 
 
 class MultiOrderSpectrum:
@@ -285,8 +313,95 @@ class MultiOrderSpectrum:
 
 class IodineAtlas(Spectrum):
     """A high-resolution FTS spectrum of the iodine absorption lines
+    
+    The FTS files distributed with pyodine carry two wavelength vectors for
+    the same flux: `wavelength` (vacuum) and `wavelength_air`. Which of them
+    an instrument needs depends on the pipeline that reduced its spectra --
+    Lick and SONG report air, PypeIt reports vacuum -- and the two differ by
+    1.56 Angstrom at 5615 Angstrom, which is 83 km/s. Reading the wrong one
+    does not fail: the atlas loads, the model runs, and the velocities are
+    nonsense.
+    
+    So the convention is recorded rather than assumed. `wave_frame` is 'air',
+    'vacuum', or None where the caller did not say, and
+    :func:`require_wave_frame` turns a mismatch into an exception.
+    
+    :param flux: Normalized transmission of the atlas.
+    :type flux: ndarray[nr_pix]
+    :param wave: Wavelength values of the atlas.
+    :type wave: ndarray[nr_pix], or None
+    :param cont: Continuum values of the atlas.
+    :type cont: ndarray[nr_pix], or None
+    :param wave_frame: The wavelength convention of `wave`: 'air', 'vacuum',
+        or None if unknown.
+    :type wave_frame: str, or None
     """
-    pass
+    
+    #: The wavelength conventions an atlas may be on, and the dataset holding
+    #: each one in the distributed FTS files
+    WAVE_FRAMES = {'vacuum': 'wavelength', 'air': 'wavelength_air'}
+    
+    def __init__(self, flux, wave=None, cont=None, wave_frame=None):
+        if wave_frame is not None and wave_frame not in self.WAVE_FRAMES:
+            raise ValueError('Unknown wave_frame {!r}; choose one of: {}'.format(
+                wave_frame, ', '.join(sorted(self.WAVE_FRAMES))))
+        super().__init__(flux, wave=wave, cont=cont)
+        self.wave_frame = wave_frame
+    
+    @classmethod
+    def from_h5(cls, filename, wave_frame):
+        """Load an atlas from a distributed FTS file, on a stated grid
+        
+        There is deliberately no default for `wave_frame`: picking one for the
+        caller is precisely the mistake this method exists to prevent.
+        
+        :param filename: Path to the HDF5 atlas.
+        :type filename: str, or :class:`pathlib.Path`
+        :param wave_frame: Which grid to read, 'air' or 'vacuum'.
+        :type wave_frame: str
+        
+        :return: The atlas, with its convention recorded.
+        :rtype: :class:`IodineAtlas`
+        """
+        import h5py
+        
+        if wave_frame not in cls.WAVE_FRAMES:
+            raise ValueError('Unknown wave_frame {!r}; choose one of: {}'.format(
+                wave_frame, ', '.join(sorted(cls.WAVE_FRAMES))))
+        dataset = cls.WAVE_FRAMES[wave_frame]
+        
+        with h5py.File(filename, 'r') as h:
+            if dataset not in h:
+                raise KeyError(
+                    '{} holds no {!r} dataset, so it cannot be read on the '
+                    '{} grid'.format(filename, dataset, wave_frame))
+            flux = h['flux_normalized'][()]
+            wave = h[dataset][()]
+        
+        atlas = cls(flux, wave=wave, wave_frame=wave_frame)
+        atlas.orig_filename = str(filename)
+        return atlas
+    
+    def require_wave_frame(self, wave_frame):
+        """Check that this atlas is on the wavelength convention expected
+        
+        An atlas that does not know its own convention warns rather than
+        raises, so that existing code which builds one by hand keeps working.
+        
+        :param wave_frame: The convention the caller works in.
+        :type wave_frame: str
+        
+        :raises DataMismatchError: If the atlas is on a different convention.
+        """
+        if self.wave_frame is None:
+            logging.warning(
+                'Iodine atlas does not record its wavelength convention; '
+                'assuming %s. An air/vacuum mix-up is 83 km/s.', wave_frame)
+            return
+        if self.wave_frame != wave_frame:
+            raise DataMismatchError(
+                'Iodine atlas is on the {} grid, but {} was required'.format(
+                    self.wave_frame, wave_frame))
 
 
 class Observation(MultiOrderSpectrum):
@@ -312,12 +427,42 @@ class Observation(MultiOrderSpectrum):
     time_start = None       # Start time of the observation <astropy.time.Time>
     time_weighted = None    # Weighted mid-time of the obs. <astropy.time.Time>
 
-    bary_date = None  # Mid-time as Barycentric Reduced Julian Date (BJD - 2400000.0)
-    bary_vel_corr = None    # Barycentric velocity correction (km/s)
+    bary_date = None        # Mid-time as full Julian Date in UTC (JD(UTC), not BJD)
+    bary_vel_corr = None    # Barycentric velocity correction (m/s)
 
     @property
     def time_mid(self):
         return self.time_start + TimeDelta(0.5 * self.exp_time, format='sec')
+    
+    def check_bary_units(self):
+        """Check that the barycentric quantities are in the units documented
+        
+        Both attributes above were documented wrongly until phase 3 of the
+        HD 187123 reduction, and neither mistake announces itself:
+        `timeseries.bary_vel_corr` passes `bary_date` to
+        `barycorrpy.get_BC_vel(JDUTC=...)`, which wants a full JD in UTC, and
+        `chunks.py` divides `bary_vel_corr` by c in m/s. A reduced Julian Date
+        or a correction in km/s both come back as plausible velocities.
+        
+        Only the date can be caught mechanically -- a reduced JD is three
+        orders of magnitude from a full one -- so that is what this checks,
+        together with a sanity bound on the velocity. A correction given in
+        km/s is indistinguishable from a small one in m/s, which is why the
+        units matter in the documentation.
+        
+        :raises ValueError: If either quantity is outside what its unit allows.
+        """
+        if self.bary_date is not None and self.bary_date < 2.4e6:
+            raise ValueError(
+                'bary_date = {} looks like a reduced Julian Date; a full '
+                'JD(UTC) is required (JD = MJD + 2400000.5)'.format(
+                    self.bary_date))
+        # The Earth's orbital motion is at most ~30 km/s, plus ~0.5 km/s of
+        # rotation; anything beyond 40 km/s is not a barycentric correction.
+        if self.bary_vel_corr is not None and abs(self.bary_vel_corr) > 4.0e4:
+            raise ValueError(
+                'bary_vel_corr = {} exceeds any possible barycentric '
+                'correction in m/s'.format(self.bary_vel_corr))
 
     def save(self, filename, data, header=None):
         """Save observation in fits format
