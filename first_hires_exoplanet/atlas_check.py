@@ -17,13 +17,17 @@ itself**, measured at HIRES resolution.  That can be compared directly against
 the atlas convolved to the same resolution.  Nothing else in this project can
 settle the question; a header keyword cannot.
 
-ENVIRONMENT.  This module needs `h5py`, which is not installed in `pypeit14`.
-It therefore deliberately avoids importing `pypeit` -- the spec1d files are
-read with plain `astropy.io.fits`, whose layout phase 1 and prompt 4 already
-documented -- so it can run in the `astro` environment, which the repository
-already uses for `figs.py`:
+ENVIRONMENT.  This module needs `h5py`, which phase 3 prompt 1 installed into
+`pypeit14` along with `barycorrpy`; it runs there now, like everything else:
 
-    conda run -n astro python -m first_hires_exoplanet.atlas_check
+    conda run -n pypeit14 python -m first_hires_exoplanet.atlas_check
+
+It ran in `astro` for phases 1 and 2 because `h5py` was missing from
+`pypeit14`.  It still avoids importing `pypeit` -- the spec1d files are read
+with plain `astropy.io.fits`, whose layout phase 1 and prompt 4 already
+documented -- which is what let it move environments without changing a line
+of the analysis, and which is also what lets it live inside the vendored
+`pyodine` tree later if that becomes useful.
 
 The atlas is 55.8 MB and lives in the data tree, not the repository.
 
