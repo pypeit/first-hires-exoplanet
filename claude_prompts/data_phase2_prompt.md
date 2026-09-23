@@ -1104,6 +1104,295 @@ already-small residual, since both spectra were put in a common frame first.
   demonstrate.
 
 
+### Prompt 6: assessment against the Keplerian and the modern catalogue
+
+`first_hires_exoplanet/figs_phase2.py` does the assessment and writes four
+figures into `docs/figs/`:
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.figs_phase2
+```
+
+| figure | what it shows |
+|---|---|
+| `fig_p2_timeseries.png` | our velocities and Teklu et al.'s over the same nine months, each on its own scale |
+| `fig_p2_phasefold.png` | both folded on 3.0966 d: the catalogue traces the Keplerian, ours does not |
+| `fig_p2_compare.png` | epoch by epoch on one scale, equal aspect |
+| `fig_p2_precision.png` | what each stage reaches against what the planet requires |
+
+#### The epochs match one to one
+
+All **30** discovery-era catalogue rows pair with one of our epochs, worst time
+difference **0.1 minutes**. Six of our 36 have no counterpart, and they are
+exactly the ones that should not:
+
+- the five **cell-out** frames (1997-12-24, 1998-08-12's template frame, and
+  the three 1998-08-26 template exposures) — Butler's method needs the cell, so
+  these were never velocity epochs;
+- the one 60 s **cell-in** frame of 1998-08-12.
+
+**That settles an open question this document has carried since it was
+written**: the survey's 32 cell-in frames against 30 catalogue velocities were
+indeed explained by the two short 60 s exposures. One of them is 1998-08-12's,
+which we reduced and which has no catalogue velocity; the other is
+1998-07-14's, which we never reduced.
+
+#### Against the modern catalogue
+
+| | rms |
+|---|---|
+| Teklu et al. 2025, discovery era | **47.4 m/s** |
+| this reduction, same epochs | **723.5 m/s** |
+| difference | **706.7 m/s** |
+
+Our scatter is **15×** the catalogue's, so the difference is essentially our own
+noise: their signal is buried inside it. The correlation is r = **+0.38**. If we
+were measuring their signal plus independent noise of our own size we would
+expect r = +0.07, and the standard error on r with 30 points is 0.19, so +0.38
+sits about 1.5 standard errors above that expectation. **That is not evidence of
+anything.** With 30 points it is the kind of correlation noise produces
+routinely, and it should not be presented as partial recovery of the signal.
+
+#### Against the published 3.097-day Keplerian
+
+Fitting a circular Keplerian with the period forced to 3.0965828 d — linear in
+its three parameters, so there is no minimiser to get stuck:
+
+| | K | residual rms | significance |
+|---|---|---|---|
+| Teklu et al. 2025 | **69.2 ± 0.3 m/s** | 2.2 m/s | 211σ |
+| this reduction | **408 ± 188 m/s** | 668 m/s | 2.2σ |
+
+The catalogue recovers the published 72 m/s cleanly, which confirms the fit is
+working and the period is right.
+
+**Our 408 m/s is not a detection and must not be read as one.** It is 5.7× the
+published value and differs from it by 1.8σ. Forcing the fit removes almost
+nothing — the residual rms falls only from 724 to 668 m/s — so the fit is
+absorbing noise, not signal. The honest statement is a **95% upper limit of
+785 m/s**, which sits **11× above** the semiamplitude we are trying to see. Our
+data are consistent with the published planet and equally consistent with no
+planet at all.
+
+#### What this does and does not demonstrate
+
+**It does demonstrate that the reduction is sound end to end.** 36 epochs over
+269 days, every one yielding a velocity. The three exposures that are themselves
+the template return zero to 17 m/s. The 22 blue orders of a single exposure
+agree to 47 m/s. The epochs match the archive's own record of the same
+observations to a tenth of a minute. Nothing in the chain from raw frame to
+velocity is broken.
+
+**It does not detect the planet, and it does not confirm the published orbit.**
+At 724 m/s against a 72 m/s semiamplitude the measurement has no power to do
+either. A non-detection was the predicted outcome — context Q3 and the phase-1
+assessment both put cross-correlation in the tens-to-hundreds of m/s band — and
+a non-detection is what we got. **Nothing in this result would have looked
+different if HD 187123 b did not exist.** Any presentation of phase 2 that
+implies otherwise would misrepresent it.
+
+It is worth being equally clear about what the *catalogue* comparison does not
+show. Teklu et al. reduced the same photons with the iodine method and reach
+1.2 m/s. That is not a statement about PypeIt against their pipeline in general;
+it is a statement about a wavelength solution from ThAr arcs against one printed
+onto the science photons by an iodine cell.
+
+#### What the achieved precision implies for phase 3
+
+To detect K = 72 m/s at 3σ per epoch, precision must improve by about **30×**,
+from 724 m/s to roughly 24 m/s.
+
+That sounds forbidding until the decomposition from prompt 5 is applied:
+
+- the **per-order scatter within one exposure is 47 m/s**, already below the
+  semiamplitude;
+- the **epoch-to-epoch scatter is 724 m/s**, fifteen times larger.
+
+The photons are not the limit. The orders of a single exposure agree with each
+other and then move together, which localises the entire deficit in the
+**wavelength zero point** — the one quantity an iodine cell fixes, by printing a
+fiducial onto the same photons through the same optics at the same instant.
+Teklu et al. reach 1.2 m/s on these very frames, so the data carry the signal;
+only our wavelength calibration does not.
+
+**This is the strongest possible argument for phase 3, and it is now measured
+rather than asserted.** Phase 2 has done what the document said it was for.
+
+Two specific consequences for phase 3:
+
+1. **The initial guess is already good enough.** `pyodine` needs a per-epoch
+   starting velocity; ours are good to ~0.7 km/s, far inside its tolerance.
+2. **Two nights carry known velocity-level defects** that an S/N filter cannot
+   see: 1998-07-19, calibrated from a borrowed arc, sits 1.5–2.4 km/s off, and
+   1998-09-17 is on a borrowed arc too. A forward model should recover both,
+   since it derives its own wavelength solution from the I2 lines — which makes
+   them a useful test of whether phase 3 is working.
+
+
+### Prompt 7: the atlas question, settled
+
+`first_hires_exoplanet/atlas_check.py`, with `docs/figs/fig_p2_atlas.png`:
+
+```
+conda run -n astro python -m first_hires_exoplanet.atlas_check
+```
+
+**Environment note.** `h5py` is not installed in `pypeit14`. Rather than change
+that environment, this module avoids importing `pypeit` — it reads the spec1d
+files with plain `astropy.io.fits`, whose layout phase 1 and prompt 4 already
+documented — so it runs in `astro`, which the repository already uses for
+`figs.py`. Phase 3 will need `h5py` in `pypeit14`, since `pyodine` requires it.
+
+The atlas is 55.8 MB and lives in `../first-hires-exoplanet-data/atlas/`, not
+the repository. Obtained from
+`raw.githubusercontent.com/pepeheeren/pyodine/main/iodine_atlas/` at commit
+`4488b0914fe5b272b787982647691045bff2604a`.
+
+#### Provenance: what the file actually is
+
+**The file carries no metadata whatsoever** — no HDF5 attributes at root or on
+any dataset. Everything below is measured from the data.
+
+| | |
+|---|---|
+| datasets | `flux`, `flux_normalized`, `wavelength`, `wavelength_air`, `wavenumber` |
+| points | 1,551,029 |
+| coverage | **4980.01–6250.00 Å vacuum** (4978.62–6248.27 air) |
+| wavenumber | 16000.01–20080.29 cm⁻¹, step 0.0025970 cm⁻¹ |
+| grid | **uniform in wavenumber** — the signature of an FTS, not a grating |
+| resolution | **R ≈ 600,000–680,000** |
+
+The coverage is exactly the I2 band and nothing else, which is consistent with
+a dedicated cell scan. The resolution is measured from 4653 isolated I2 lines
+in 5400–5600 Å: FWHM 0.440 km/s at the 10th percentile, 0.500 km/s median.
+
+Against that, the **thermal Doppler width** of I2 is 0.242 km/s at 50 °C,
+0.248 at 65 °C, 0.251 at 75 °C. The narrowest atlas lines are within a factor
+of two of the thermal limit, so the atlas genuinely resolves the forest. The
+temperature cannot be pinned from the widths — the FTS profile dominates, and
+50 °C and 75 °C are indistinguishable at 0.44 km/s.
+
+**The atlas resolution is not a limitation for us.** HIRES runs at R ≈ 42,000
+(measured in prompt 4); the atlas is fifteen times finer.
+
+#### The empirical test, which is the point of this prompt
+
+The 1998-08-12 pair — `HI.19980812.29160` cell in, `HI.19980812.29316` cell
+out, 156 seconds apart — divides out the star, the blaze and the detector and
+leaves the **transmission of the HIRES cell itself**, at HIRES resolution. Both
+frames are reduced (prompt 3). 14 orders in the I2 band give a usable ratio.
+
+Comparing against the atlas convolved to R = 42,000, with an *identical*
+running-95th-percentile continuum applied to both sides:
+
+| | |
+|---|---|
+| median correlation, measured vs atlas | **0.928** |
+| median measured depth | 0.122 |
+| median atlas depth | 0.044 |
+
+**The line positions transfer. The depths do not.** This is exactly the split
+the document predicted: positions are molecular constants, depths are column
+density and temperature.
+
+#### How much deeper, and is it one number?
+
+A mean-depth ratio is the wrong statistic because it ignores saturation. The
+physical comparison is Beer–Lambert: if the cells differ only in column
+density then T_HIRES = T_atlas^α, and α is the column-density ratio. Fitting α
+on the logarithms is a one-parameter linear fit.
+
+| fit range | α | spread | n |
+|---|---|---|---|
+| full (0.02–0.97) | 2.79 | 2.26–3.53 | 13 |
+| restricted (0.50–0.90) | **2.59** | **2.28–2.86** | 7 |
+
+Over the full range α trends with wavelength — 3.5 at 6050 Å down to 2.3 at
+5320 Å — and is largest exactly where the absorption is weakest. That is the
+continuum, not the cell: where the forest is dense a running 95th percentile
+cannot find true continuum. Restricting to transmissions of 0.50–0.90, where
+neither saturation nor continuum placement bites, the spread collapses.
+
+**A single exponent α ≈ 2.6 describes the difference.** The two cells differ in
+column density, not in a way that reshuffles relative line strengths — so
+temperature is not importantly different either.
+
+*Noise control:* the measured ratio comes from two 60 s frames, and a running
+upper-percentile continuum rides up on noise, deepening lines. Injecting the
+same 1.7% fractional noise into the atlas and pushing it through the identical
+normalisation returns α = 1.07. The noise accounts for 7%, not a factor of 2.6.
+**The depth difference is real.**
+
+`fig_p2_atlas.png` shows it directly: as shipped, the atlas is line-for-line
+aligned with the measured HIRES cell and far too shallow; raised to the power
+2.6 it tracks it almost exactly.
+
+#### Can it serve as the HIRES cell's atlas?
+
+**As shipped, no. Transformed, yes — but `pyodine` cannot do the transformation
+it offers.**
+
+`pyodine` carries a free `iod_depth` parameter (`models/spectrum.py:17`), which
+looks like it settles the matter. It does not, because of how it is applied
+(`models/spectrum.py:93`):
+
+```python
+flux_iod = params['iod_depth'] * (flux_iod - 1.0) + 1.0
+```
+
+That is a **linear** depth scaling, T → 1 + d(T − 1). The physical law is
+Beer–Lambert, T → T^α. The two agree only for weak lines. This atlas reaches
+`flux_normalized` = 0.000, and a saturated line at T = 0 scaled linearly by
+d = 2.6 returns **T = −1.6**: negative transmission. **5.8% of the atlas would
+go negative** under the scaling we need.
+
+So three routes, in order of preference:
+
+1. **Change `pyodine`'s depth model from linear to power-law** — a one-line
+   change, `flux_iod ** params['iod_depth']`, which is physically correct,
+   reduces to the current behaviour for weak lines, and lets the code fit α
+   itself. This is the recommendation.
+2. **Pre-transform the atlas** with T → T^2.6 before handing it over, and leave
+   `iod_depth` free to take up the residual. Works with `pyodine` unmodified,
+   but bakes in a number measured from two 60 s frames.
+3. **Obtain an FTS scan of the actual HIRES cell.** The real answer, and worth
+   asking for — the Keck/HIRES cell was scanned for the Butler et al. (1996)
+   method, but no public copy has been found. This is the one item here that
+   needs someone outside the project.
+
+#### The air/vacuum trap, which would have been fatal
+
+`pyodine`'s `IodineTemplate` reads **`wavelength_air`**
+(`utilities_lick/load_pyodine.py`). PypeIt reports **vacuum**. The two grids
+differ by 1.56 Å at 5615 Å, which is **83 km/s**.
+
+Measured on order 65, against the HIRES cell transmission:
+
+| atlas grid | correlation |
+|---|---|
+| vacuum | **+0.903** |
+| air | **+0.078** |
+
+The signal disappears entirely. This project has already been caught once by
+air versus vacuum — phase 1's spurious +70 km/s — and this is the same trap in
+a new place. The prompt-8 adapter must read `wavelength`, not `wavelength_air`.
+
+#### Answers to the three questions asked
+
+1. **Can the Fischer atlas serve as the HIRES cell's atlas?** Its line
+   positions can, at correlation 0.93. Its depths cannot: the HIRES cell is
+   2.6× optically thicker. The fix is a power-law rescaling, which `pyodine`'s
+   linear `iod_depth` cannot express.
+2. **Can the 1998-08-12 pair test that empirically?** Yes, and it has. 14
+   orders, a decisive answer on both positions and depths, with a noise control
+   that rules out the artefact. Nothing else in this dataset could have settled
+   it, and no header keyword could.
+3. **If not, what would we need instead?** An FTS scan of the HIRES cell. Not
+   required to proceed — routes 1 and 2 above are sound — but it would remove
+   the one remaining assumption, that a single Beer–Lambert exponent captures
+   the whole difference between two cells whose temperatures we cannot measure.
+
+
 ## Logs
 
 ### 2026-09-22 (Prompt 1: settled the reference frame — and found a sign error in PypeIt's heliocentric correction)
@@ -1502,5 +1791,153 @@ template return +2.1, +17.0 and -14.2 m/s, which is the internal check passing.
 `reduce_19*`); `first_hires_exoplanet/build_template.py` (the same
 cross-correlation sign error, which there only flipped the sign of an
 already-small residual).
+
+**No git command changed state.**
+
+### 2026-09-22 (Prompt 6: assessment -- a clean non-detection, and the measured case for phase 3)
+
+**Task.** Prompt 6 of this document: assess what prompt 5 produced, compare
+against the published 3.097-day Keplerian and the modern catalogue in
+`hd187123_hires_rv.tsv`, state plainly what the comparison does and does not
+demonstrate and what the precision implies for phase 3, with figures from a
+script on disk. Full findings are in the Report section above.
+
+**What was done.**
+
+- Wrote `first_hires_exoplanet/figs_phase2.py`: matches our epochs to the
+  catalogue by time, fits a circular Keplerian at the forced period to both,
+  and writes four figures to `docs/figs/`.
+- Figures: `fig_p2_timeseries.png`, `fig_p2_phasefold.png`,
+  `fig_p2_compare.png`, `fig_p2_precision.png`.
+
+**Headline results.** All 30 discovery-era catalogue rows match one of our
+epochs to 0.1 minutes. Catalogue rms 47.4 m/s against our 723.5. Fitting the
+published period: the catalogue gives K = 69.2 +/- 0.3 m/s at 211 sigma,
+residual 2.2 m/s; ours gives K = 408 +/- 188 m/s, residual 668 m/s, a 95% upper
+limit of 785 m/s. A clean, expected non-detection.
+
+**What this taught us about the repository and the data.**
+
+- **An open question in this document is now closed.** The survey's 32 cell-in
+  frames against 30 catalogue velocities were indeed the two 60 s exposures.
+  Six of our 36 epochs have no catalogue match and they are exactly the five
+  cell-out frames plus 1998-08-12's 60 s cell-in frame; the other short frame,
+  1998-07-14's, we never reduced. The one-to-one match of the remaining 30, to
+  a tenth of a minute, also independently validates the timing chain from raw
+  header through mid-exposure to BJD.
+- **A fitted amplitude is not a detection.** Forcing the published period on
+  our velocities returns K = 408 +/- 188 m/s at 2.2 sigma, which reads like a
+  marginal signal until three things are checked: it is 5.7x the published
+  value, it differs from the published value by 1.8 sigma, and forcing the fit
+  drops the residual rms only from 724 to 668 m/s. It is the amplitude our noise
+  happens to place at that period. The reportable number is the upper limit.
+- **A correlation coefficient needs its null stated alongside it.** Ours against
+  the catalogue gives r = +0.38, which looks encouraging. If we were measuring
+  their signal plus independent noise of our own size, the expected r is +0.07,
+  and the standard error with 30 points is 0.19. So +0.38 is about 1.5 standard
+  errors from the expectation -- unremarkable. Quoting r alone would have
+  invited a claim of partial recovery that the data do not support.
+- **The non-detection is the deliverable, and it is a strong one.** Per-order
+  scatter within an exposure is 47 m/s, already below the 72 m/s semiamplitude;
+  epoch-to-epoch scatter is 724 m/s. The photons are not the limit. That
+  localises the entire 30x shortfall in the wavelength zero point, which is
+  precisely what an iodine cell removes, and Teklu et al. reach 1.2 m/s on these
+  same frames. Phase 2 was framed as the step that produces the argument for
+  phase 3; the argument is now a measurement.
+- **Equal aspect was the right choice for the comparison figure even though it
+  looks bad.** Plotting ours against the catalogue on a square where one axis is
+  the other's units collapses 30 points into a vertical stripe. That is not a
+  failed figure, it is the result: the catalogue's entire range is +/-142 m/s
+  and ours is +/-2 km/s. Rescaling the axes independently would have hidden
+  exactly what the figure exists to show.
+- **VizieR's declared units are wrong and the repository already knew.**
+  `figs.py` records that the RV columns are labelled km/s and are actually m/s.
+  Worth having read that note before trusting the column.
+
+**Files added.**
+
+- `first_hires_exoplanet/figs_phase2.py`
+- `docs/figs/fig_p2_timeseries.png`, `fig_p2_phasefold.png`,
+  `fig_p2_compare.png`, `fig_p2_precision.png`
+
+**No git command changed state.**
+
+### 2026-09-23 (Prompt 7: the atlas settled -- positions transfer, depths are 2.6x off, and an 83 km/s trap)
+
+**Task.** Prompt 7 of this document: obtain
+`iodine_atlas/Fischer_Cell_May2022_downsampled3.h5` from `pyodine`, establish
+its provenance, compare it against what is known of the HIRES cell, and report
+whether it can serve as that cell's atlas, whether the 1998-08-12 pair can test
+that empirically, and if not what we would need instead. Full findings are in
+the Report section above.
+
+**What was done.**
+
+- Downloaded the atlas (55.8 MB) to `../first-hires-exoplanet-data/atlas/`.
+- Wrote `first_hires_exoplanet/atlas_check.py`, which characterises the file,
+  measures its resolution from 4653 isolated I2 lines, derives the HIRES cell's
+  own transmission from the 1998-08-12 cell-in/cell-out pair, and fits the
+  Beer-Lambert exponent between the two. Figure: `docs/figs/fig_p2_atlas.png`.
+
+**Headline results.** The atlas covers 4980-6250 A vacuum on a
+wavenumber-uniform FTS grid at R ~ 600,000-680,000, with no metadata of any
+kind. Its line positions match the HIRES cell at correlation 0.93. Its depths
+do not: the HIRES cell is 2.6x optically thicker, a single Beer-Lambert
+exponent. `pyodine`'s linear `iod_depth` cannot express that. And `pyodine`
+loads the atlas on the **air** wavelength grid while PypeIt reports vacuum, an
+83 km/s offset that destroys the correlation entirely.
+
+**What this taught us about the repository and the data.**
+
+- **The 1998-08-12 pair is worth more than the document credited it with.** It
+  was recorded as "a ready-made diagnostic pair for isolating the cell's
+  transmission empirically", which turned out to be exactly right, and it is
+  the only way this question could have been settled from our own data. It also
+  justifies having reduced that night in prompt 3, where it was nearly lost to
+  the `TARGNAME = 'H187123'` typo.
+- **The air/vacuum trap has now caught this project twice in different
+  places.** Phase 1 found a spurious +70 km/s comparing vacuum observations
+  against air rest wavelengths; here `pyodine` loads `wavelength_air` while our
+  spectra are vacuum, an 83 km/s offset that drops the correlation from +0.90
+  to +0.08. Any external wavelength reference entering this project should have
+  its frame checked before it is used, as a standing rule.
+- **A free parameter is not the same as the right functional form.** `pyodine`
+  has an `iod_depth` parameter, which on first reading settles the depth
+  mismatch. It applies it linearly, T -> 1 + d(T-1), where the physics is
+  T -> T**alpha. For the d = 2.6 we need, 5.8% of the atlas goes to negative
+  transmission. Reading the parameter list was not enough; the line that uses
+  it had to be read too.
+- **Choose the statistic that matches the physics.** A mean-depth ratio gave
+  2.50 with no way to tell whether one number could describe the difference.
+  Fitting the Beer-Lambert exponent gave 2.79, and restricting to the
+  transmission band where continuum placement and saturation do not bite gave
+  2.59 with the spread collapsing from 2.26-3.53 to 2.28-2.86. That collapse is
+  the actual result: one exponent is enough, so the cells differ in column
+  density and not in temperature.
+- **A trend in a fitted parameter is often the method, not the object.** Alpha
+  ran 3.5 to 2.3 across the band and was largest where the absorption was
+  weakest, which is where a running upper-percentile continuum works best. The
+  physical reading -- a temperature difference reshuffling line strengths --
+  would have been wrong.
+- **Normalise both sides the same way.** The first version put the measured
+  spectrum through a running percentile filter and the atlas through a single
+  scalar. Any continuum difference then lands in the depth comparison.
+- **Noise biases an upper-envelope continuum.** Two 60 s frames give a 1.7%
+  ratio noise, and a 95th-percentile continuum rides up on it, deepening every
+  line. Injecting matched noise into the atlas and re-running the identical
+  normalisation returned alpha = 1.07, which bounds the artefact at 7%. Worth
+  doing whenever a depth or equivalent width is measured off a noisy spectrum.
+- **`h5py` is not in `pypeit14`.** `pyodine` requires it, so phase 3 will need
+  it installed there. This module sidesteps the issue by reading spec1d files
+  with plain `astropy.io.fits` rather than `pypeit.specobjs`, which also
+  demonstrates that the spec1d layout is simple enough not to need PypeIt to
+  read it -- useful for the prompt-8 adapter.
+
+**Files added.**
+
+- `first_hires_exoplanet/atlas_check.py`
+- `docs/figs/fig_p2_atlas.png`
+- `../first-hires-exoplanet-data/atlas/Fischer_Cell_May2022_downsampled3.h5`
+  (data tree, not the repo)
 
 **No git command changed state.**
