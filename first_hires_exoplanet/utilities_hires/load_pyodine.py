@@ -43,9 +43,12 @@ and each capable of destroying the result silently:
 3.  **Quality (prompt 2).**  11% of order-spectra are unusable, almost all
     because `OPT_MASK` collapsed when the object profile spilled past the
     extraction aperture in poor seeing.  Those orders are given zero weight.
-    Their flux is left alone: `components.Spectrum.__init__` raises
+    Their flux is never zeroed: `components.Spectrum.__init__` raises
     `NoDataError` on an all-zero flux vector, so zeroing the flux would make
-    the order unloadable rather than merely unused.
+    the order unloadable rather than merely unused.  For the same reason,
+    phase 3 prompt 4 fills the exact zeros PypeIt itself writes into masked
+    pixels -- by interpolation, at zero weight -- because a single chunk
+    inside such a run is enough to make the whole epoch fail to chunk.
 
 4.  **Vacuum, not air (prompt 7).**  PypeIt reports vacuum wavelengths.
     `pyodine`'s Lick `IodineTemplate` reads `wavelength_air` from the FTS
@@ -297,6 +300,37 @@ def load_quality(path=DEFAULT_QUALITY):
 # Reading a spec1d
 # ---------------------------------------------------------------------------
 
+def fill_wavelengths(wave, deg=5):
+    """ Give every pixel a wavelength, extrapolating over masked ones.
+
+    PypeIt writes masked pixels as exact zeros -- in the *wavelength* column
+    as well as the flux (phase 1's trap, one column over).  Every order of
+    every spec1d has a zero at its first and last pixel, and orders that run
+    off the chip have hundreds.  `pyodine` reads ``wave[0]`` and ``wave[-1]``
+    of each order directly and divides by them (``get_velocity_offset``), and
+    its chunking assumes a monotonic grid.  The zeros are replaced from a
+    smooth polynomial through the good pixels.  The caller must keep those
+    pixels at zero weight; nothing may be fitted to them.
+
+    Found in phase 3 prompt 3 (the template), fixed here in prompt 4.
+
+    Args:
+        wave (ndarray): one order's wavelengths, zeros where masked.
+        deg (int): polynomial degree.
+
+    Returns:
+        ndarray: a copy, every entry positive.
+    """
+    wave = np.asarray(wave, dtype=float).copy()
+    good = wave > 0
+    if good.all() or good.sum() <= deg:
+        return wave
+    pix = np.arange(len(wave), dtype=float)
+    poly = np.polynomial.Polynomial.fit(pix[good], wave[good], deg)
+    wave[~good] = poly(pix[~good])
+    return wave
+
+
 def load_file(filename, quality=None):
     """ Read a PypeIt spec1d into the rectangular arrays `pyodine` wants.
 
@@ -345,21 +379,54 @@ def load_file(filename, quality=None):
     orders = np.array([r[0] for r in rows], dtype=int)
 
     for i, (order, vel_corr, w, f, iv, m) in enumerate(rows):
-        # (1) back to the observed frame -- see the module docstring
-        wave[i] = w / vel_corr
+        # (1) back to the observed frame -- see the module docstring.  Masked
+        # pixels arrive with a wavelength of exactly zero; give them one (they
+        # keep zero weight below, because `good` tests the original `w`).
+        wave[i] = fill_wavelengths(w / vel_corr)
         flux[i] = f
         # Masked pixels arrive as exact zeros, not flagged gaps (phase 1)
         good = m & (iv > 0) & (w > 0) & np.isfinite(f) & (f != 0)
         if good.sum() > 50:
             cont[i] = continuum(np.where(good, f, np.median(f[good])))
         # (3) inverse variance, zeroed on bad pixels and on orders prompt 2
-        # rejects.  The flux is deliberately left intact: an all-zero flux
-        # vector makes components.Spectrum raise instead of merely being
-        # ignored.
+        # rejects.  The flux of a rejected order is never zeroed: an all-zero
+        # flux vector makes components.Spectrum raise instead of merely being
+        # ignored (and see (5) below for PypeIt's own zeros).
         usable = quality.get((koaid, order), True)
         weight[i] = np.where(good & usable, iv, 0.)
+        # (5) Phase 3 prompt 4: an order need not be all-zero to break
+        # `pyodine`.  PypeIt zero-fluxes masked runs inside orders too (113
+        # pixels of order 70 in 1998-08-26 19326), and one 40-pixel chunk
+        # inside such a run makes `Spectrum` raise -- for the whole epoch,
+        # since every chunk is built before any is fitted.  Those pixels get
+        # an interpolated flux; `good` excluded them above, so their weight
+        # stays zero and nothing is fitted to them.
+        flux[i] = fill_masked_flux(f)
 
     return flux, wave, cont, weight, orders, header
+
+
+def fill_masked_flux(flux):
+    """ Replace exact-zero and non-finite flux by linear interpolation.
+
+    The companion of :func:`fill_wavelengths`: PypeIt writes masked pixels as
+    exact zeros, and `pyodine` refuses any chunk whose flux is all zero.  The
+    caller must keep those pixels at zero weight.  An order with no good flux
+    at all is returned unchanged (and carries zero weight throughout).
+
+    Args:
+        flux (ndarray): one order's flux.
+
+    Returns:
+        ndarray: a copy.
+    """
+    flux = np.asarray(flux, dtype=float).copy()
+    bad = (flux == 0.) | ~np.isfinite(flux)
+    if not bad.any() or bad.all():
+        return flux
+    pix = np.arange(len(flux), dtype=float)
+    flux[bad] = np.interp(pix[bad], pix[~bad], flux[~bad])
+    return flux
 
 
 # ---------------------------------------------------------------------------
@@ -528,13 +595,22 @@ class IodineTemplate(_AtlasBase):
       to negative transmission, so it cannot absorb the difference itself.
 
     Args:
-        iodine_cell (str): path to the atlas HDF5 file.
+        iodine_cell (str or int): path to the atlas HDF5 file, or an index
+            into ``conf.my_iodine_atlases`` -- the form `pyodine`'s drivers
+            use, ``IodineTemplate(Pars.i2_to_use)``.
         scale_depth (bool): apply the Beer-Lambert rescaling.
     """
 
     def __init__(self, iodine_cell=DEFAULT_ATLAS, scale_depth=True):
         import h5py
 
+        if isinstance(iodine_cell, (int, np.integer)):
+            from . import conf
+            frame = conf.my_iodine_atlas_frames[int(iodine_cell)]
+            if frame != 'vacuum':
+                raise ValueError('Atlas {:d} is recorded as {:s}; HIRES/PypeIt '
+                                 'wavelengths are vacuum'.format(int(iodine_cell), frame))
+            iodine_cell = conf.my_iodine_atlases[int(iodine_cell)]
         self.orig_filename = iodine_cell
         with h5py.File(iodine_cell, 'r') as h:
             flux = np.array(h['flux_normalized'], dtype=float)

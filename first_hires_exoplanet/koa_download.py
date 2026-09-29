@@ -233,6 +233,27 @@ for _night in ('19971223', '19971224'):
               "AND iodin = 'T' AND hatopen = 'F' AND xcovopen = 'T'",
         keep=None))
 
+# Phase 3, prompt 4 (the Q&A decision after prompt 3): the frames that measure
+# the *stellar* instrumental profile on the template night.  B stars are nearly
+# featureless and rotate fast, so through the iodine cell they show the I2
+# forest at the LSF the star actually had -- which the ThAr arcs, filling the
+# slit, only bound from above.  HR 7236 (08:21 UT) and HR 8634 (10:20 UT)
+# bracket the three template exposures (09:39-09:59 UT); HR 8634 and HR 838
+# recur later that night.  The iodine-in quartz flat is the same forest at the
+# slit-filling profile.  They go to their own directory, beside the night's and
+# not inside it, because `reduce_run.frame_roles` globs the night directory
+# and would otherwise reduce them as HD 187123 science frames.
+LSF_DIR_19980826 = '1998aug26_lsf'
+SELECTIONS.append(dict(
+    label='bstar_iodine', night='19980826',
+    where="koaimtyp = 'object' AND iodin = 'T' AND deckname = 'B1' "
+          "AND (targname LIKE 'hr%' OR targname LIKE 'HR%')",
+    subdir=LSF_DIR_19980826, keep=None))
+SELECTIONS.append(dict(
+    label='flat_B1_iodine', night='19980826',
+    where="koaimtyp = 'flatlamp' AND deckname = 'B1' AND iodin = 'T'",
+    subdir=LSF_DIR_19980826, keep=None))
+
 #: Chunk size for streaming downloads, bytes
 CHUNK = 1 << 20
 
