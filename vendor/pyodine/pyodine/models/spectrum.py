@@ -4,6 +4,29 @@ import logging
 import sys
 
 from ..lib.misc import rebin, osample
+
+
+def template_chunk_index(chunk, chunk_ind):
+    """The index of the template chunk that models ``chunk``.
+
+    The fitting loop passes each chunk's position in its own list as
+    ``chunk_ind``.  That is the template index only if the observation was
+    chunked over every template order: `chunks.auto_wave_comoving` builds
+    chunks for the orders it is given, so on a subset every later chunk would
+    be modelled against a template chunk from another order, silently.  A
+    chunk that records its template index (``chunk.template_index``, set by
+    `auto_wave_comoving`) is resolved through that; any other falls back to
+    ``chunk_ind``.
+
+    :param chunk: The chunk being modelled.
+    :type chunk: :class:`Chunk`
+    :param chunk_ind: Its position in the list being fitted.
+    :type chunk_ind: int
+
+    :return: The template chunk index.
+    :rtype: int
+    """
+    return getattr(chunk, 'template_index', chunk_ind)
 from .base import DynamicModel, ParameterSet
 
 
@@ -152,7 +175,7 @@ class SimpleModel(DynamicModel):
                     require=require
                 )
             else:
-                tem = self.stellar_template[chunk_ind]
+                tem = self.stellar_template[template_chunk_index(chunk, chunk_ind)]
 
             # Ensure "normalization" to mean value 1.0
             # FIXME: Do something more sophisticated here
@@ -296,7 +319,7 @@ class SimpleModel(DynamicModel):
                 require=require
             )
         else:
-            tem = self.stellar_template[chunk_ind]
+            tem = self.stellar_template[template_chunk_index(chunk, chunk_ind)]
 
         # Ensure "normalization" to mean value 1.0
         # FIXME: Do something more sophisticated here

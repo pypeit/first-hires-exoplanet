@@ -204,13 +204,27 @@ class HIRES:
 
 
 class Star:
-    """ The star, in the shape `pyodine` expects of one. """
+    """ The star, in the shape `pyodine` expects of one.
+
+    `pyodine.components.Star` carries ``proper_motion`` as an (RA, Dec) tuple
+    in mas/yr, ``(None, None)`` when unknown, and `results_io` reads it when
+    it saves any fit.  Phase 2 wrote this class with ``pmra``/``pmdec`` only;
+    the first full-epoch run (phase 3 prompt 5) fitted 700 chunks and then
+    failed to save them.  Both spellings are kept.
+    """
 
     def __init__(self, name, coordinates=None, pmra=np.nan, pmdec=np.nan,
                  rv0=np.nan):
         self.name = name
         self.coordinates = coordinates
         self.pmra, self.pmdec, self.rv0 = pmra, pmdec, rv0
+
+    @property
+    def proper_motion(self):
+        """ `pyodine`'s spelling: ``(pm_ra, pm_dec)``, None where unknown. """
+        def _pm(v):
+            return None if v is None or not np.isfinite(v) else float(v)
+        return (_pm(self.pmra), _pm(self.pmdec))
 
     def __repr__(self):
         return '<Star {:s}>'.format(self.name)
@@ -331,7 +345,7 @@ def fill_wavelengths(wave, deg=5):
     return wave
 
 
-def load_file(filename, quality=None):
+def load_file(filename, quality=None, extraction='OPT'):
     """ Read a PypeIt spec1d into the rectangular arrays `pyodine` wants.
 
     Read with plain `astropy.io.fits` rather than `pypeit.specobjs`, so the
@@ -340,19 +354,26 @@ def load_file(filename, quality=None):
     Args:
         filename (str): a PypeIt spec1d file.
         quality (dict, optional): output of :func:`load_quality`.
+        extraction (str): 'OPT' (optimal, the default) or 'BOX' (boxcar).  The
+            boxcar is for stars that over-fill the slit, which PypeIt extracts
+            with `force_center_obj` and whose optimal mask collapses (the
+            1998-08-26 B stars; phase 3, after prompt 6).
 
     Returns:
         tuple: (flux, wave, cont, weight, orders, header), the first four
         shaped (nord, npix).
     """
     quality = {} if quality is None else quality
+    ex = str(extraction).upper()
+    if ex not in ('OPT', 'BOX'):
+        raise ValueError('extraction must be OPT or BOX, not {!r}'.format(extraction))
     with fits.open(filename) as hdul:
         header = hdul[0].header
         koaid = str(header.get('FILENAME', '')).replace('.fits', '')
 
         rows = []
         for hdu in hdul[1:]:
-            if not hasattr(hdu, 'columns') or 'OPT_WAVE' not in hdu.columns.names:
+            if not hasattr(hdu, 'columns') or ex + '_WAVE' not in hdu.columns.names:
                 continue
             order = int(hdu.header['ECH_ORDER'])
             # VEL_CORR is per-object and identical across orders, but read it
@@ -361,10 +382,10 @@ def load_file(filename, quality=None):
             vel_corr = float(hdu.header.get('VEL_CORR', 1.0) or 1.0)
             d = hdu.data
             rows.append((order, vel_corr,
-                         np.asarray(d['OPT_WAVE'], dtype=float),
-                         np.asarray(d['OPT_COUNTS'], dtype=float),
-                         np.asarray(d['OPT_COUNTS_IVAR'], dtype=float),
-                         np.asarray(d['OPT_MASK'], dtype=bool)))
+                         np.asarray(d[ex + '_WAVE'], dtype=float),
+                         np.asarray(d[ex + '_COUNTS'], dtype=float),
+                         np.asarray(d[ex + '_COUNTS_IVAR'], dtype=float),
+                         np.asarray(d[ex + '_MASK'], dtype=bool)))
 
     if not rows:
         raise NoDataError('No echelle orders in {:s}'.format(filename))
@@ -448,10 +469,13 @@ class ObservationWrapper(_ObsBase):
     _cont = None
     _weight = None
 
-    def __init__(self, filename, instrument=None, star=None, quality=None):
+    def __init__(self, filename, instrument=None, star=None, quality=None,
+                 extraction='OPT'):
         if quality is None:
             quality = load_quality()
-        flux, wave, cont, weight, orders, header = load_file(filename, quality)
+        flux, wave, cont, weight, orders, header = load_file(filename, quality,
+                                                             extraction=extraction)
+        self.extraction = str(extraction).upper()
 
         self._flux, self._wave, self._cont, self._weight = flux, wave, cont, weight
         # NOT `self.orders`: `components.MultiOrderSpectrum` defines that as a

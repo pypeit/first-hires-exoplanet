@@ -219,6 +219,11 @@ def auto_wave_comoving(obs, temp, padding=0, orders=None,
             # Create a new chunk and calculate pixels
             pixels = startpix2 + np.arange(width2, dtype='int')
             chunk = Chunk(obs, o+order_correction, pixels, padding2)
+            # Record which template chunk this is.  Only the orders asked for
+            # get chunks, so a chunk's position in this list is its template
+            # index only when every template order is asked for; the model
+            # resolves the template through this (`template_chunk_index`).
+            chunk.template_index = i
             chunks.append(chunk)
     
     """

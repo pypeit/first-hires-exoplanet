@@ -14,6 +14,7 @@ import logging
 import sys
 
 from .template.base import StellarTemplate_Chunked
+from .models.spectrum import template_chunk_index
 from .timeseries.misc import robust_std
 
 def plot_chunkmodel(fit_results, chunk_array, chunk_nr, template=True, tellurics=None, 
@@ -78,8 +79,10 @@ def plot_chunkmodel(fit_results, chunk_array, chunk_nr, template=True, tellurics
             beta = fit_results[chunk_nr].params['velocity'] / 299792458.
             doppler = np.sqrt((1. + beta) / (1. - beta))
             if isinstance(fit_results[chunk_nr].model.stellar_template, StellarTemplate_Chunked):
-                temp = fit_results[chunk_nr].model.stellar_template[chunk_nr]
-                temp_shifted = fit_results[chunk_nr].model.stellar_template[chunk_nr]
+                temp = fit_results[chunk_nr].model.stellar_template[
+                    template_chunk_index(fit_results[chunk_nr].chunk, chunk_nr)]
+                temp_shifted = fit_results[chunk_nr].model.stellar_template[
+                    template_chunk_index(fit_results[chunk_nr].chunk, chunk_nr)]
             else:
                 # Get template range for this chunk, and doppler shifted template
                 temp = fit_results[chunk_nr].model.stellar_template.get_wavelength_range(sp.wave[0], sp.wave[-1])
@@ -252,8 +255,10 @@ def live_chunkmodel(fit_result, chunk_array, chunk_nr, tellurics=None,
             beta = fit_result.params['velocity'] / 299792458.
             doppler = np.sqrt((1. + beta) / (1. - beta))
             if isinstance(fit_result.model.stellar_template, StellarTemplate_Chunked):
-                temp = fit_result.model.stellar_template[chunk_nr]
-                temp_shifted = fit_result.model.stellar_template[chunk_nr]
+                temp = fit_result.model.stellar_template[
+                    template_chunk_index(fit_result.chunk, chunk_nr)]
+                temp_shifted = fit_result.model.stellar_template[
+                    template_chunk_index(fit_result.chunk, chunk_nr)]
             else:
                 # Get template range for this chunk, and doppler shifted template
                 temp = fit_result.model.stellar_template.get_wavelength_range(sp.wave[0], sp.wave[-1])

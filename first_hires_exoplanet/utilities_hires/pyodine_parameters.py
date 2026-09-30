@@ -35,10 +35,22 @@ What differs from Lick, and why:
   observation; the Q&A after prompt 3 carries both forward, and the value
   here stays Lick's until prompt 5 decides.
 
-What is *not* settled here: the LSF model.  Run 0 is Lick's single Gaussian,
-started at the ThAr width (2.2 px; prompt 3 measured 2.15-2.59 px over the
-iodine orders); run 1 is Lick's multi-Gaussian with Lick's satellite layout.
-Prompt 6 chooses on evidence.
+The LSF model, settled in prompt 6 (`compare_lsf_models.py`).  Run 0 is a
+single Gaussian started at the ThAr width (2.2 px); run 1 is `pyodine`'s
+**super-Gaussian**.  On the prompt-5 epoch the four workable models -- single,
+super, Lick's and SONG's multi-Gaussians -- are indistinguishable in
+per-chunk velocity scatter (paired bootstrap, all within +/-13 m/s and every
+68% interval including zero); the super-Gaussian ties for the lowest scatter
+and has the lowest chi-square, is centred (Lick's multi-Gaussian is not, and
+carries a +0.03 px centroid), and has 4 parameters to their 10.  The
+Hermite model is worse and biased; a run 2 with the smoothed LSF held fixed
+does not help.  The single Gaussian is the equivalent fallback.
+
+Run 1's shape parameters are started with :func:`start_inside`: `fit_lsfs`
+puts every parameter a Gaussian does not need at ~1e-12, where `lmfit`'s
+relative finite-difference step cannot move it and the whole fit returns its
+start -- which is what the super-Gaussian and Hermite trials of prompt 6 did
+until this was fixed.
 """
 
 from pyodine import models
@@ -69,6 +81,35 @@ LSF_FWHM_START = 2.2
 #: Measured / propagated noise (prompt 3).  Divide reported chi-square by the
 #: square of this; see the module docstring.
 NOISE_SCALE = 0.426
+
+#: Physical bounds of the super-Gaussian's parameters, pixels (prompt 6).
+#: Lick's generic p +/- (|p| + 0.3) would allow a negative exponent.
+SUPER_BOUNDS = {'sigma': (0.2, 3.0), 'exponent': (1.0, 4.0),
+                'left': (0.0, 1.0), 'right': (0.0, 1.0)}
+
+
+def start_inside(value, lo, hi, floor=1e-3, margin=0.02):
+    """ A starting value `lmfit`'s leastsq can move (prompt 6).
+
+    MINPACK's finite-difference step is relative to the value, so a parameter
+    started at ~1e-12 -- where `fit_lsfs` puts every shape parameter a
+    Gaussian does not need -- has a zero derivative, and the fit returns its
+    start.  No smaller than ``floor`` in magnitude, and ``margin`` of the
+    range inside either bound.
+    """
+    v = value if abs(value) >= floor else (floor if value >= 0 else -floor)
+    span = hi - lo
+    return float(min(max(v, lo + margin * span), hi - margin * span))
+
+
+def lsf_bounds(model_name, name, value):
+    """ Bounds for one run-1 LSF parameter: physical for the super-Gaussian,
+    Lick's rule otherwise. """
+    if model_name == 'SuperGaussian':
+        return SUPER_BOUNDS[name]
+    if model_name == 'SingleGaussian':
+        return 0.5, 4.0
+    return value - abs(value) - 0.3, value + abs(value) + 0.3
 
 
 def _run_dict(lsf_model, lsf_setup_dict=None, pre_wave_deg=0):
@@ -156,11 +197,10 @@ class Parameters:
         self.vel_analysis_plots = -1
 
         # Run 0: single Gaussian, the first wavelength solution.
-        # Run 1: Lick's multi-Gaussian, started from run 0's median LSF.
+        # Run 1: super-Gaussian (prompt 6), started from run 0's median LSF.
         self.model_runs = {
             0: _run_dict(models.lsf.SingleGaussian, pre_wave_deg=3),
-            1: _run_dict(models.lsf.MultiGaussian_Lick,
-                         lsf_setup_dict=_multigauss_setup_dict),
+            1: _run_dict(models.lsf.SuperGaussian),
         }
 
     def constrain_parameters(self, lmfit_params, run_id, run_results, fitter):
@@ -216,10 +256,10 @@ class Parameters:
                 lmfit_params[i]['cont_slope'].set(
                         value=run_results[0]['results'][i].params['cont_slope'])
                 for p in lsf_fit_pars.keys():
+                    lo, hi = lsf_bounds(self.model_runs[1]['lsf_model'].name(), p,
+                                        lsf_fit_pars[p])
                     lmfit_params[i]['lsf_' + p].set(
-                        value=lsf_fit_pars[p],
-                        min=lsf_fit_pars[p] - abs(lsf_fit_pars[p]) - 0.3,
-                        max=lsf_fit_pars[p] + abs(lsf_fit_pars[p]) + 0.3)
+                        value=start_inside(lsf_fit_pars[p], lo, hi), min=lo, max=hi)
 
         return lmfit_params
 
@@ -281,9 +321,10 @@ class Template_Parameters:
         # Prompt 3.  At osample_temp = 10 the template does not reproduce the
         # observation (chi2 5.2 against the measured noise) because the
         # deconvolver splines barely-sampled pixels; at 1 it does (chi2 1.1).
-        # Both templates exist; prompt 5 decides.
+        # Both templates exist.  Prompts 5 and 6 decided for 1: lower
+        # per-chunk scatter for every workable LSF model (prompt 6, paired).
         self.deconvolution_pars = {
-                'osample_temp': 10,
+                'osample_temp': 1,
                 'jansson_niter': 1200,
                 'jansson_zerolevel': 0.00,
                 'jansson_contlevel': 1.02,
@@ -303,8 +344,7 @@ class Template_Parameters:
 
         self.model_runs = {
             0: _run_dict(models.lsf.SingleGaussian, pre_wave_deg=3),
-            1: _run_dict(models.lsf.MultiGaussian,
-                         lsf_setup_dict=_multigauss_setup_dict),
+            1: _run_dict(models.lsf.SuperGaussian),
         }
 
     def constrain_parameters(self, lmfit_params, run_id, run_results, fitter):
@@ -345,10 +385,10 @@ class Template_Parameters:
                 lmfit_params[i]['cont_slope'].set(
                         value=run_results[0]['results'][i].params['cont_slope'])
                 for p in lsf_fit_pars.keys():
+                    lo, hi = lsf_bounds(self.model_runs[1]['lsf_model'].name(), p,
+                                        lsf_fit_pars[p])
                     lmfit_params[i]['lsf_' + p].set(
-                        value=lsf_fit_pars[p],
-                        min=lsf_fit_pars[p] - abs(lsf_fit_pars[p]) - 0.3,
-                        max=lsf_fit_pars[p] + abs(lsf_fit_pars[p]) + 0.3)
+                        value=start_inside(lsf_fit_pars[p], lo, hi), min=lo, max=hi)
 
         return lmfit_params
 

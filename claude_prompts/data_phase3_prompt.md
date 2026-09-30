@@ -336,6 +336,142 @@ The evidence for each is in `## Report`, "Prompt 3".
 
    Answer: (b)
 
+### After prompt 5: decisions before prompt 6
+
+The evidence for each is in `## Report`, "Prompt 5".
+
+1. **The misfit follows the iodine, not the LSF. Should prompt 6 still be
+   about the LSF alone?** χ²_ν tracks iodine contrast at partial ρ ≈ +0.7,
+   against +0.1 for stellar contrast. The Fischer atlas is a different cell.
+   The B-star frames downloaded for prompt 6 can measure both things at
+   once: the stellar LSF, and the transmission of the *HIRES* cell at HIRES
+   resolution (the B-star spectrum is almost pure iodine). The options:
+   - (a) prompt 6 as written: compare LSF models on this epoch, atlas
+     unchanged;
+   - (b) prompt 6 first fits the B stars with the atlas free to rescale per
+     chunk (a per-chunk `iod_depth`, i.e. α), and then compares LSF models;
+   - (c) a new step before prompt 6: build an empirical HIRES-cell
+     correction from the B stars.
+
+   My recommendation: (b). It stays inside `pyodine`'s own O-star machinery
+   and answers whether a per-chunk α removes the correlation, before choosing
+   an LSF on top of a known-wrong atlas.
+
+   *Added after prompt 6, which ran as (a) because this was unanswered.* The
+   LSF turned out to be a ≤5% lever. The misfit's correlation with iodine
+   contrast is the same under every LSF model (partial ρ +0.63 to +0.73).
+   That strengthens (b), or (c), as the next step before prompt 7.
+
+   Answer: Ok, please do (b)
+
+2. **Should the index trap be fixed in the fork?** The driver fits
+   observation chunk *i* against template chunk *i*, and a subset of orders
+   breaks that silently. 11 of the 31 cell-in epochs have at least one
+   rejected iodine order. The options:
+   - (a) fit every epoch over all 14 orders, with rejected orders at zero
+     weight, and drop them afterwards. There is no fork change, but the
+     zero-weight chunks enter run 1's medians;
+   - (b) fix the fork: store each observation chunk's template index and fit
+     against that. It gets its own test, and it goes upstream in the prompt-10
+     report.
+
+   My recommendation: (b), before prompt 7.
+
+   Answer: (b)
+
+3. **Should the B stars be reduced as part of prompt 6?** The 12 frames are
+   on disk in `raw/1998aug26_lsf/`, unreduced. They need a PypeIt run that
+   borrows 1998-08-26's calibrations. My recommendation: yes, as the first
+   step of prompt 6.
+
+   Answer: use your recommendation
+
+### After the prompt-5 decisions were carried out: before prompt 7
+
+The evidence is in `## Report`, "Prompt 6, continued".
+
+1. **The atlas's line pattern, not its depth, limits the fit. Attempt an
+   empirical HIRES-cell spectrum before prompt 7?**
+
+   Fixing each chunk's α to its B-star value changed nothing significant,
+   and the pure-iodine B-star fits misfit where the iodine is strongest,
+   just as HD 187123 does. The one remaining fix is option (c) from the
+   round before: build the HIRES cell's own transmission from the B stars
+   and use it in place of the Fischer atlas. The B stars give that at the
+   stellar LSF, so it would need deconvolving, or an atlas-plus-correction
+   form. A real FTS scan of the Keck cell would be better still, but none
+   has been found.
+
+   The options:
+   - (a) prompt 7 now, with the current model. The epoch velocity already
+     agrees with the prediction to ~1–2σ at ±12 m/s. Prompt 7's
+     epoch-to-epoch scatter measures what the misfit actually costs. Revisit
+     (c) if it exceeds the target.
+   - (b) (c) first: an empirical cell correction from the 10 B-star frames,
+     tested on the prompt-5 epoch, then prompt 7.
+
+   My recommendation: (a). The question that decides whether (c) is worth
+   the effort is "what does the misfit cost epoch to epoch", and prompt 7
+   answers it. The misfit is common to every epoch's chunks, so it may cancel
+   largely in relative velocities.
+
+   Answer: (a)
+
+### After prompt 9: before prompts 10–11
+
+The evidence is in `## Report`, "Prompt 9".
+
+1. **Which velocities are phase 3's result?** Prompt 7's combination uses
+   all 31 epochs and every usable order. It gives 25.8 m/s per epoch and
+   K = 72.4 ± 7.1 m/s (10σ). Prompt 9 found two weak groups, and neither
+   criterion uses the Keplerian:
+   - the red orders 58–61, where the iodine is weak and whole orders shift
+     together;
+   - six epochs with ≤ 8 usable orders.
+
+   Leaving both out gives 11.5 m/s and K = 71.8 ± 3.5 (20σ) on 25 epochs.
+   But the decision to try it came after the residuals were seen. The
+   options:
+   - (a) keep prompt 7 as the headline, and report the prompt-9 variants as
+     "what a better combination would reach";
+   - (b) make it a method change, stated before any Keplerian is looked at:
+     weight each *order* by the scatter of its own time series (the
+     chunk-level weighting prompt 7 already uses, one level up), recompute
+     the errors, and re-run prompt 8. Dropping orders by hand would then be
+     unnecessary;
+   - (c) adopt "without 58–61 and the weak epochs" as the result.
+
+   My recommendation: (a) for prompt 11's headline, because it is the result
+   made without hindsight. (b) could be a documented follow-up; it is
+   principled, but anything done now has been seen. Not (c).
+
+>A. (a)
+
+### After prompt 10: sending the upstream reports
+
+The drafts are `docs/upstream/pypeit_report_draft.md` and
+`docs/upstream/pyodine_report_draft.md`. Nothing has been sent.
+
+1. **Are the drafts right to send?** Edit them in place or say what to
+   change. The PypeIt draft carries a placeholder, `<repository link>`, which
+   needs this repository's public URL.
+>A. I will send them
+2. **How should the PypeIt items go?** The options:
+   - (a) email Ryan as drafted, and you send it;
+   - (b) GitHub issues on `pypeit/PypeIt`, one per item or group, plus a PR
+     from `orig-hires-fixes` for items 1–5;
+   - (c) both: the email as the overview, then the issues and the PR.
+
+   My recommendation: (c). Items 7, 8, 10 and 13–15 affect other users and
+   want tracking; the email gives Ryan the context. I will not open issues
+   or a PR myself unless you ask, because that is outward-facing.
+>A. (c)
+3. **Should the `pyodine` report go at all, and how?** By email to the
+   authors, or as GitHub issues on `pepeheeren/pyodine` (a one-commit
+   repository with no issue traffic, so email is more likely to be read). My
+   recommendation: email first, offering PRs.
+>A. As Issue(s) on GitHub
+
 ## Logging
 
 After finishing a task, append a dated entry under `## Logs` below, in the
@@ -1063,6 +1199,1416 @@ The first two are prompts 5 and 6.
 - **Raw data:** `../first-hires-exoplanet-data/raw/1998aug26_lsf/` (12
   frames).
 
+### Prompt 5: one epoch, end to end — right velocity, wrong iodine
+
+**In one paragraph.** `pyodine`'s own driver fits all 700 chunks of an epoch
+in under a minute. The epoch's median velocity agrees with the prediction to
+12–18 m/s, with a statistical error of about 13 m/s. But each chunk scatters
+6–7 times more than its photon noise, the model misfits at χ²_ν ≈ 23, and the
+misfit follows the iodine, not the star. The fitted wavelength solution sits
+about 1 km/s from PypeIt's, with structure. The two prompt-3 templates are
+nearly indistinguishable at this level.
+
+`first_hires_exoplanet/fit_one_epoch.py` produces everything below. It runs
+`pyodine_model_observations.model_single_observation` unchanged through
+`utilities_hires`: run 0 is a single Gaussian and run 1 is Lick's
+multi-Gaussian. It does so for both templates, then analyses the saved
+results.
+
+**The epoch, and a trap that decided it.** The epoch is `HI.19980825.19425`:
+cell in, 430 s, S/N 167. It is the best cell-in frame whose 14 iodine orders
+all pass the quality filter, and that condition is necessary:
+- The driver fits observation chunk *i* against template chunk *i*.
+- But `auto_wave_comoving` builds observation chunks only for the orders it
+  is passed.
+- So any subset of orders silently pairs every chunk after the gap with a
+  template chunk from a different order. The spline extrapolates, and there
+  is no error.
+- Prompt 4's epoch (19326) has orders 58–59 rejected, so it cannot be run
+  correctly as the code stands.
+
+For prompt 7 this means one of two things: epochs must be fitted over all
+template orders with rejected orders at zero weight, or the driver must be
+fixed.
+
+The epoch's raw OBJECT reads `Gl 83.1`, a stale keyword. The pointing
+(19:46:58 +34:25:10) and TARGNAME are HD 187123's.
+
+**Getting it to run: one more adapter repair.** The first full run fitted all
+700 chunks and then died writing the results: `results_io` reads
+`obs.star.proper_motion`, which the adapter's `Star` lacked. The driver
+reported this with `logging.info`, so **its error log was empty**. The adapter
+now carries `proper_motion`, with a test that fits a real chunk and
+round-trips it through `save_results`/`load_results`. This driver checks the
+info log and the existence of every result file, never the error log.
+
+**Runtime.**
+
+| template | total | run 0 | run 1 |
+|---|---|---|---|
+| os 10 | 58.8 s | 16.6 s | 39.1 s |
+| os 1 | 47.6 s | 13.7 s | 30.7 s |
+
+That is serial, on one core, and includes the driver's plots. All 31 epochs
+would be about half an hour, before any parallelism.
+
+**How many chunks fail** (700 in each case):
+
+| | os 10, run 0 | os 10, run 1 | os 1, run 0 | os 1, run 1 |
+|---|---|---|---|---|
+| lmfit failed | 0 | 0 | 0 | 0 |
+| no uncertainties | 59 | 60 | 59 | 60 |
+| a parameter at a bound | 2 | 0 | 0 | 0 |
+| misfit (χ² > 3× order median) | 64 | 66 | 59 | 71 |
+| velocity outlier (> 5 robust σ) | 35 | 24 | 32 | 23 |
+| **good** | **552** | **562** | **560** | **556** |
+
+Nothing fails loudly: every failure is a fit that returned. The
+no-uncertainty chunks are spread over every order, are not tied to masked
+pixels, and fit worse (median χ²_ν 34 against 24). The Chauvenet step
+re-fitted nothing, as prompt 4 predicted.
+
+**The per-chunk velocity scatter.** Good chunks, m/s:
+
+| | os 10, run 0 | os 10, run 1 | os 1, run 0 | os 1, run 1 |
+|---|---|---|---|---|
+| median velocity | −684 | −677 | −694 | −671 |
+| expected (barycentric + planet) | −689 | −689 | −689 | −689 |
+| robust σ per chunk | 340 | 301 | 339 | 287 |
+| standard deviation, good chunks | 483 | 434 | 494 | 441 |
+| standard deviation, all chunks | 2245 | 808 | 2029 | 1012 |
+| median lmfit error (misfit-scaled) | 179 | 216 | 174 | 224 |
+| median photon-noise error | 40 | 48 | 39 | 48 |
+| epoch error, robust σ / √n | 14.5 | 12.7 | 14.3 | 12.1 |
+| order-to-order scatter of medians | 154 | 106 | 91 | 64 |
+| median within-order robust σ | 292 | 240 | 364 | 273 |
+| median χ²_ν, measured noise | 25.7 | 23.6 | 25.9 | 22.7 |
+
+Five things follow:
+- **The epoch is where it should be.** The epoch velocity agrees with the
+  prediction to 5–18 m/s, and its statistical error is ~13 m/s. The median is
+  robust to the selection: −677 good, −679 all finite, −682 non-outlier (os
+  10, run 1). *If* the chunk errors are independent, one epoch already beats
+  the 50 m/s target. Prompt 7 is where that "if" gets tested.
+- **The per-chunk scatter is 6–7× the photon noise, and 1.4× even the
+  misfit-inflated lmfit error.** The error bars understate the scatter even
+  after absorbing the misfit.
+- **The standard deviation is the wrong statistic here too.** It is 808–2245
+  m/s over all chunks, set by a few dozen outliers.
+- **Run 1 (multi-Gaussian) improves on run 0** in every row: −12% robust
+  scatter, −30% order-to-order.
+- **Red orders scatter most.** By order (os 10, run 1), the robust σ is
+  410–600 m/s in orders 58–61, where the photon error is also 90–140 m/s, and
+  130–250 m/s in orders 63–71, where the photon error is 23–40 m/s.
+
+**What the misfit follows: the iodine, not the star.** For each chunk, the
+contrast of the α-scaled atlas and of the template (RMS about the mean) was
+set against χ²_ν. Spearman correlations over ~560 good chunks:
+
+| | iodine | stellar | partial, iodine | partial, stellar |
+|---|---|---|---|---|
+| os 10, run 0 | +0.76 | +0.39 | **+0.72** | +0.17 |
+| os 10, run 1 | +0.73 | +0.34 | **+0.69** | +0.11 |
+| os 1, run 0 | +0.77 | +0.34 | **+0.73** | +0.11 |
+| os 1, run 1 | +0.71 | +0.33 | **+0.67** | +0.11 |
+
+χ²_ν by order peaks at ~45 in orders 65–68 and falls to ~10 at both ends,
+tracking the iodine band's strength.
+- An LSF error would misfit stellar and iodine structure alike.
+- A template error would follow the stellar contrast.
+- What the data show is misfit tracking the iodine with the star held fixed.
+
+That is the signature of **the iodine model**: the Fischer atlas is a
+different cell (phase 2: 0.928 line correlation), with one Beer–Lambert α.
+It is the most important thing prompt 5 found for prompt 6. **Choosing an
+LSF model cannot fix an atlas that is the wrong cell.**
+
+**The LSF as a function of position.**
+
+- **Run 0 (single Gaussian), os 10:**
+  - median FWHM **2.00 px**; per-order, per-quarter medians range 1.76–2.60
+    px;
+  - the red orders (58–60) are broadest, at 2.2–2.6 px;
+  - in the blue orders the width rises along the order, from ~1.8 px at pixel
+    250 to ~2.05 px at pixel 1300 (fig. panel d).
+- **Run 1 (multi-Gaussian):**
+  - FWHM 1.99 px;
+  - half-maximum asymmetry −0.01 to −0.02, essentially symmetric;
+  - but a **centroid offset of +0.03 px, about 60 m/s**.
+
+  Lick's multi-Gaussian is deliberately not re-centred. So that offset is a
+  velocity zero point the LSF absorbs, and it is shared, degenerately, with
+  the velocity and the wavelength intercept.
+- **The same night's ThAr is 2.51 px** (1754 lines), against 2.18 px on
+  08-26. So star/ThAr is 0.78–0.80, and the arc width moved 15% between
+  nights while the star's stayed at ~2.0 px (prompt 4 found 2.07 on 08-26).
+  **The ThAr is not a usable proxy for the stellar LSF in either direction.**
+  That is one more reason prompt 6 needs the B stars.
+
+**The wavelength solution against PypeIt's.** For each good chunk, the
+fitted line (`wave_intercept`, `wave_slope`) was compared with PypeIt's
+`OPT_WAVE` over the same pixels:
+
+| | os 10, run 1 | os 1, run 1 |
+|---|---|---|
+| median offset over orders | **−954 m/s** | **−941 m/s** |
+| order-to-order scatter | 151 m/s | 129 m/s |
+| within-order robust σ | 178 m/s | 191 m/s |
+| trend along an order | +15 m/s per 1000 px | +9 m/s per 1000 px |
+| dispersion ratio | 0.99986 | 0.99968 |
+
+Run 0 gives −1020 m/s and a +82–96 m/s/kpx trend, because its dispersion is
+smoothed over the order before the fit.
+
+Across the band the offset runs from about −0.7 km/s at 5000 Å to −1.0 km/s,
+with sharp excursions of 1–2 km/s at the red ends of the reddest orders (fig.
+panel e). That is the shape a per-order polynomial takes where it is poorly
+constrained.
+
+The offset is not constant between nights: prompt 4 measured −0.54 to −0.57
+km/s on 08-26 for one chunk. A fixed atlas offset cannot do that; PypeIt's
+per-epoch ThAr zero point can. This is the phase-2 diagnosis appearing
+directly, but it rests on two epochs and one chunk of one of them, and
+prompts 7 and 9 will test it properly.
+
+**The continuum against PypeIt's.** The model normalises the iodine and the
+template by their chunk means, so the raw `cont_intercept` is not a
+continuum. Once de-normalised (`cont × ⟨T⟩^(−d) × (d_t(1/⟨S⟩−1)+1)`), it is
+the flux the model puts at a line-free pixel:
+
+| | os 10, run 1 | os 1, run 1 |
+|---|---|---|
+| chunk-to-chunk scatter vs OPT_FLAT, de-normalised | 2.40% | 2.40% |
+| the same, raw `cont_intercept` | 5.68% | 6.42% |
+| de-normalised / the adapter's 95th-percentile envelope | 1.099 ± 0.037 | 1.101 ± 0.036 |
+
+The ratio to PypeIt's blaze has the **same U shape in every order**: +8% at
+both ends of an order, −5% in the middle (panel f). That is a smooth
+difference between the star's and the flat lamp's illumination of the blaze.
+The flats are 1998-08-12 donors through a different decker, and scattered
+light is a plausible cause. It does not matter to a chunk-by-chunk continuum,
+but it would to anyone using `OPT_FLAT` as the blaze. The adapter's envelope
+sits 10% below the continuum the model finds, as a running percentile does in
+a line-dense band.
+
+**The two templates.** At the epoch level they are close to
+indistinguishable. Oversampling 1 is marginally better in run 1: robust σ
+287 against 301, order-to-order 64 against 106 m/s, χ²_ν 22.7 against 23.6.
+Its median velocity is 18 m/s further from the prediction (os 10 is 12 m/s
+off). Prompt 3's re-convolution failure of the os-10 template is real, but
+it is not what limits the fit now. The iodine model is.
+
+**Products.**
+- **Code:** `first_hires_exoplanet/fit_one_epoch.py`.
+- **Tables:** `first_hires_exoplanet/data/one_epoch_chunks.csv` (every chunk,
+  both templates and runs, 1.2 MB), `one_epoch_summary.csv`,
+  `one_epoch_lsf.csv`.
+- **Figure:** `docs/figs/fig_p5_one_epoch.png`.
+- **Test:** `first_hires_exoplanet/tests/test_adapter_results_io.py`.
+- **`pyodine`'s own results and plots:**
+  `../first-hires-exoplanet-data/pyodine_runs/HI.19980825.19425_os{10,1}/`.
+
+### Prompt 6: the LSF is settled, and it is not the lever
+
+**Scope.** The three Q&A questions after prompt 5 were unanswered when this
+prompt ran. It therefore ran **as written**, which is option (a) of question
+1: LSF models compared on the prompt-5 epoch, atlas unchanged. The B stars
+were not reduced (question 3) and the fork was not changed (question 2).
+All three remain yours.
+
+**The answer.** The prompt expected the LSF to be "the largest single lever
+on the final precision". **It is not.**
+- Of the five models `pyodine` offers, the four that work give the same
+  per-chunk velocity scatter to within ±5%, and no paired difference is
+  significant.
+- The fifth (Hermite) is worse and biased.
+- Holding a smoothed LSF fixed (run 2) never helps.
+
+The chosen model is the **super-Gaussian**, with the **oversampling-1
+template**, and it is now the `utilities_hires` default. The lever that
+remains is the iodine model: prompt 5's diagnosis is unchanged by any LSF.
+
+**What was compared.** `first_hires_exoplanet/compare_lsf_models.py` ran
+prompt 5's driver on `HI.19980825.19425` ten times: five run-1 models × two
+templates. Each run had the common run 0 (single Gaussian) first and a run 2
+after (run 1's LSF smoothed ±160 px and ±3 orders, Lick's radii, then held
+fixed as `FixedLSF`).
+
+| name | model | LSF parameters | configuration |
+|---|---|---|---|
+| single | `SingleGaussian` | 1 | FWHM 0.5–4 px |
+| super | `SuperGaussian` | 4 | σ 0.2–3 px, exponent 1–4, satellites 0–1 |
+| multi_lick | `MultiGaussian_Lick` | 10 | Lick's layout, Lick's bounds (prompt 5's run 1) |
+| multi_song | `MultiGaussian` | 10 | SONG's layout, Lick's bounds |
+| hermite | `HermiteGaussian` | 7 | SONG's enabled weights 3–8, each −0.5 to 0.5 |
+
+Two configurations depart from upstream on purpose:
+- **SONG's Hermite bounds** pin every weight within ±2×10⁻¹³ of ~10⁻⁹,
+  which makes the model a single Gaussian.
+- **Lick's generic bounds** would allow the super-Gaussian a negative
+  exponent.
+
+The smoothing's order separation is HIRES's: 71 physical pixels (36 binned),
+measured from the spec1d traces, where Lick uses 15.
+
+**A trap the first attempt fell into.** The first pass gave the
+super-Gaussian a per-chunk σ of exactly 0 and every Hermite chunk no
+uncertainties. Neither fit had moved from its start.
+- Lick's run-1 scheme starts from `fit_lsfs`, which fits the new model to
+  run 0's Gaussian. That sends every parameter a Gaussian does not need
+  (satellites, Hermite weights) to about 10⁻¹².
+- `lmfit`'s `leastsq` takes finite-difference steps *relative to the value*,
+  which is about 10⁻²⁰ there. The derivatives are zero, and MINPACK returns
+  the start after one Jacobian: 16 evaluations for 11 parameters, every
+  value at `init`.
+- It is probably why SONG's own Hermite configuration pins the weights.
+
+Fixed by starting each shape parameter at least 10⁻³ from zero and 2%
+inside its bounds (`pyodine_parameters.start_inside`, tested). It belongs in
+the prompt-10 report. Everything below is from the fixed run.
+
+**The result.** Good chunks, run 1. Robust σ and order-to-order scatter are
+in m/s; the epoch median is against −689 m/s expected (error ≈ ±12–17):
+
+| model | os | good | robust σ | order-to-order | χ²_ν (measured) | epoch median | no-unc | run-1 time |
+|---|---|---|---|---|---|---|---|---|
+| single | 10 | 565 | 319 | 80 | 24.2 | −684 | 59 | 12 s |
+| super | 10 | 554 | **295** | 109 | **23.3** | −681 | 59 | 21 s |
+| multi_lick | 10 | 562 | 301 | 106 | 23.6 | −677 | 60 | 37 s |
+| multi_song | 10 | 544 | 304 | 72 | 28.5 | −669 | 58 | 31 s |
+| hermite | 10 | 544 | 397 | 153 | 32.7 | **−551** | 60 | 39 s |
+| single | 1 | 569 | 289 | 52 | 25.0 | −669 | 59 | 11 s |
+| super | 1 | 564 | 288 | **50** | **22.6** | −665 | 59 | 18 s |
+| multi_lick | 1 | 556 | 287 | 64 | 22.7 | −671 | 60 | 29 s |
+| multi_song | 1 | 541 | **278** | 77 | 27.3 | −658 | 56 | 28 s |
+| hermite | 1 | 552 | 375 | 162 | 34.9 | **−551** | 60 | 36 s |
+
+**Is any difference real?** Paired bootstrap over the chunks both models
+call good, against `multi_lick` run 1 on the same template. The change in
+robust σ, with its 68% interval:
+
+| model | os 10 | os 1 |
+|---|---|---|
+| single | +13 [−11, +30] | +3 [−16, +30] |
+| super | −3 [−25, +15] | −0 [−17, +21] |
+| multi_song | +4 [−12, +28] | −11 [−26, +13] |
+| **hermite** | **+92 [+70, +120]** | **+108 [+91, +140]** |
+
+The four workable models are statistically indistinguishable, and Hermite is
+clearly worse. Switching among the workable four moves individual chunk
+velocities by 150–180 m/s (robust) but the epoch by only 5–21 m/s. Hermite
+moves the epoch by +92 to +117 m/s: it finds a spurious −0.08 asymmetry
+where every other model finds the profile symmetric (≤0.02).
+
+**Run 2, the smoothed LSF held fixed, does not help.**
+- Robust σ changes by −13 to +63 m/s against run 1, never significantly
+  better.
+- It loses 30–40 good chunks for the multi-Gaussians and raises χ²_ν by 1–4.
+- It moves the epoch by up to 3.3σ (multi_lick os 1: −644) and 5σ
+  (multi_song os 1: −604).
+
+The per-chunk LSF is doing work, and smoothing it away undoes that work. The
+most likely work is absorbing some of the iodine misfit chunk by chunk, since
+the misfit's correlation with iodine contrast is unchanged by every model
+(partial ρ +0.63 to +0.73) while χ² rises when the LSF is smoothed.
+
+**What the profile is.** Every workable model converges on the same shape:
+- FWHM **2.00–2.05 px**;
+- symmetric, with half-maximum asymmetry ≤ 0.02 in magnitude;
+- centred, except Lick's non-re-centred multi-Gaussian, which carries a
+  +0.03–0.04 px centroid (~60–75 m/s) that is degenerate with the velocity
+  and wavelength zero point.
+
+The per-order, per-position variation of prompt 5 (1.6–2.6 px, broadest in
+the red orders) is common to all models. It is the profile, not the model.
+
+**The choice, and why.**
+1. **The super-Gaussian (run 1, no run 2).** On velocity scatter it ties for
+   best with both templates; that is the deciding criterion, and the tie is
+   the point. The tie-breaks all favour it:
+   - the lowest χ²_ν with both templates;
+   - the lowest order-to-order scatter with the oversampling-1 template;
+   - centred, unlike Lick's multi-Gaussian;
+   - 4 parameters where the multi-Gaussians have 10, and no parameter at a
+     bound;
+   - run 1 in about 60% of the multi-Gaussians' time.
+
+   The single Gaussian is the statistically equivalent fallback. BIC
+   prefers `multi_lick`, but at χ²_ν ≈ 23 BIC is scoring systematic misfit
+   and rewards flexibility without improving a velocity, so it was not used
+   to decide.
+2. **The oversampling-1 template**, which settles the Q&A decision after
+   prompt 3 to let the fit decide. Paired, same model, oversampling 1
+   against 10:
+
+   | model | change in robust σ |
+   |---|---|
+   | single | −28 [−40, −10] |
+   | super | −11 [−29, +2] |
+   | multi_lick | −23 [−43, −4] |
+   | multi_song | −28 [−53, −15] |
+
+   It is also consistent with prompt 5. The two templates' epochs differ by
+   +6 to +8 m/s (a zero point, irrelevant to relative velocities).
+
+`utilities_hires/pyodine_parameters.py` now sets run 1 to the
+super-Gaussian, with physical bounds and `start_inside`, in both
+`Parameters` and `Template_Parameters`, and `osample_temp = 1`. Four new
+tests pin this.
+
+**The levers, ranked** (per-chunk robust σ on this epoch):
+
+| lever | effect |
+|---|---|
+| per-chunk scatter against photon noise | **×6–7** (≈290 against ≈45 m/s): what is left to win |
+| the iodine model (prompt 5) | the dominant term, and not yet varied: partial ρ ≈ +0.7 with iodine contrast, under every LSF |
+| a broken configuration (Hermite as tried) | +30% |
+| run 2, smoothed and fixed LSF | 0 to +25% |
+| run 0 → run 1 (prompt 5) | −12% |
+| template oversampling 10 → 1 | −4% to −9% |
+| **LSF model, among the four that work** | **≤ ±5%, not significant** |
+
+**Products.**
+- **Code:** `first_hires_exoplanet/compare_lsf_models.py`;
+  `utilities_hires/pyodine_parameters.py` (settled).
+- **Tables:** `first_hires_exoplanet/data/lsf_models_summary.csv` (40 rows),
+  `lsf_models_chunks.csv` (7000 rows, 1.9 MB) and
+  `lsf_models_template_pairs.csv`.
+- **Figure:** `docs/figs/fig_p6_lsf_models.png`.
+- **Test:** `first_hires_exoplanet/tests/test_lsf_settled.py`.
+- **`pyodine`'s results:** `../first-hires-exoplanet-data/pyodine_runs/lsf_*`
+  (10 directories).
+
+### Prompt 6, continued: the Q&A decisions after prompt 5, carried out
+
+**The three decisions.** Taken after prompt 6 had run, and acted on here:
+
+| question | decision |
+|---|---|
+| 1 | (b): fit the B stars with a per-chunk α, then compare LSF models |
+| 2 | (b): fix the index trap in the fork |
+| 3 | reduce the B stars first |
+
+**The answer, in brief.**
+- **The index trap is fixed in the fork**, with a test.
+- **The B stars are reduced.** 10 of 11 frames are usable, after one PypeIt
+  parameter and a switch to the boxcar extraction.
+- **The iodine depths are not the problem.** The HIRES cell is α ≈ 3.33 with
+  a gentle wavelength trend.
+- **The iodine line pattern is.** Fixing each chunk's α to its B-star value
+  leaves the epoch's scatter, χ² and iodine-correlated misfit unchanged, and
+  the pure-iodine B-star fits show the same correlation.
+- **On pure iodine the LSF models are again near-equivalent.** The
+  super-Gaussian choice stands.
+
+**1. The index trap, fixed in the fork (change 5).**
+- `chunks.auto_wave_comoving` now records each chunk's template index
+  (`chunk.template_index`).
+- `SimpleModel.eval`, `SimpleModel.clean_of_I2` and the four
+  template-plotting sites in `plot_lib` resolve the template through a new
+  `models.spectrum.template_chunk_index(chunk, chunk_ind)`. It falls back to
+  the list index for chunks built any other way.
+- `tests/test_fork_chunk_index.py` builds one epoch's chunks for all orders
+  and for a subset. It failed before the change, when the same chunk gave a
+  different model from each list, and passes after.
+- `vendor_pyodine --verify` shows exactly the intended diff.
+- `vendor/README.md` now lists every change to the fork. It had still been
+  claiming "byte-identical to upstream" since prompt 2.
+- It should go upstream in the prompt-10 report. Any epoch may now be fitted
+  over any subset of orders.
+
+**2. The B stars, reduced.**
+`first_hires_exoplanet/reduce_bstars.py` stages the night's own ThAr arc and
+the 1998-08-12 donor flats with the 11 B-star frames. It reuses 1998-08-26's
+`reduce_run.PARAM_BLOCK` and copies the night's calibrations rather than
+rebuilding them. Output goes to `redux/reduce_19980826_lsf/`, and the HD
+187123 reduction is untouched. Two things were needed:
+
+- **`force_center_obj = True`**, the remedy built for Shane/Hamspec's
+  slit-filling stars. PypeIt at `017bece06` has it.
+  - Without it, a V ≈ 3–4 star in a 3.5″ slit defeated peak-finding: HR 8634
+    (37323) was found in 1 of 37 orders, and the echelle extraction stopped
+    the run.
+  - With it, one object is placed at each order's centre and extracted with
+    a boxcar across the order. Sky subtraction was already off.
+  - It is applied to the B stars only.
+- **The boxcar extraction, not the optimal one.** On these slit-filling stars
+  the optimal extraction's mask collapses: 8–38% of iodine-order pixels kept
+  in most frames. The boxcar's keeps 99%, at 90–95% of the S/N.
+  - The adapter gained `extraction='OPT'|'BOX'` (default `OPT`, unchanged),
+    with a test.
+  - The boxcar does not mask the detector's bad columns (runs of 3–4 pixels
+    at ~15% of the continuum), so `pyodine`'s own `BadPixelMask` is applied.
+    `Template_Parameters` asks for it, and it took the first B-star fit from
+    χ²_ν ≈ 1800 to ≈ 44.
+  - `create_template` computes that mask on the *template* observation and
+    applies it to the hot star's weights. Here it is computed on each B-star
+    frame.
+- **HR 838 at 20 s (55734) is unusable.** The raw frame peaks at 773 ADU:
+  the star missed the slit.
+
+**3. The iodine cell through the B stars** (`fit_bstars.py`: `pyodine`'s
+hot-star path, the template's chunk grid, velocity and template depth fixed,
+`iod_depth` free per chunk, run 1 the super-Gaussian).
+
+| | |
+|---|---|
+| noise, HR 8634 pair differenced pixel by pixel | 1.61 × propagated (boxcar); HD 187123's optimal extraction: 0.43× |
+| χ²_ν, measured noise, per frame | HR 838 1.0–1.2; HR 8634 2.0–4.0; HR 7236 3.9–5.2 |
+| α, map over 10 frames | median **3.33**; between chunks 0.34; frame to frame per chunk 0.31; one chunk's error 0.44 |
+| α per frame | 3.29–3.45 |
+| α against wavelength / iodine contrast | Spearman +0.43 / −0.22 |
+| χ² against iodine contrast | Spearman **+0.40** |
+| LSF FWHM | 2.10 px (per frame 2.01–2.17), symmetric; rising along every order from ~2.0 px to ~2.2 px |
+| fitted wavelengths against PypeIt | −143 m/s median; **−392 to +95 m/s from frame to frame** |
+
+Five things follow:
+- **The cell is thicker than the adapter assumes.** α ≈ 3.33, not 2.59.
+  Phase 2's 2.28–2.86 came from two 60 s frames. Between chunks α varies
+  less than one chunk's error: a band-wide α with a gentle red-ward rise
+  (panel a) is all the data support.
+- **The misfit that follows the iodine is there in pure iodine too**
+  (panel b). χ² climbs steeply above an iodine contrast of ~0.3, as it does
+  for HD 187123. It is not the star, the template or anything stellar.
+- **The noise scale is extraction-specific.** The boxcar's inverse variance
+  *understates* the noise (1.61) where the optimal one overstates it (0.43).
+  A χ² is comparable only within one extraction. In PypeIt's own units the
+  B-star χ²_ν (~3–13) is not clearly better than HD 187123's (~4), so "the B
+  stars fit to the noise" would overstate it.
+- **The iodine wavelength scale moves against PypeIt's through the night**,
+  by half a km/s between B-star frames an hour apart. PypeIt's single
+  end-of-night arc cannot follow that, and slit-filling B stars may also
+  shift with their position in the slit. This is prompt 9's intra-night
+  question, seen from the calibration side.
+- **The B-star LSF (2.1 px) matches the star's (~2.0 px)** and this night's
+  ThAr (2.18). Its trend along the order is the one prompt 5 saw in the star.
+
+**The LSF models on pure iodine** (HR 8634 pair, run 1; median χ²_ν,
+measured noise):
+
+| model | 37213 | 37323 | α | FWHM |
+|---|---|---|---|---|
+| single | 3.14 | 3.00 | 3.19–3.21 | 2.09–2.11 |
+| super | 3.12 | 3.01 | 3.30–3.36 | 2.11–2.14 |
+| multi_lick | 3.41 | 3.19 | 3.20–3.24 | 2.05–2.07 |
+| multi_song | 4.04 | 3.63 | 3.22–3.29 | 2.11–2.13 |
+| hermite | 4.62 | **29.6** | 1.84–3.05 | 1.43–2.09 |
+
+The single and super-Gaussians fit pure iodine best by median χ² (Lick's
+multi-Gaussian has the lowest total, fewer bad tails), and α and the FWHM
+barely depend on the model. Hermite is unstable. The prompt-6 choice stands.
+
+**4. The payoff: the prompt-5 epoch with each chunk's α fixed to its B-star
+value** (super-Gaussian, oversampling-1 template):
+
+| | good | robust σ | order-to-order | χ²_ν (measured) | epoch − expected | partial ρ, iodine |
+|---|---|---|---|---|---|---|
+| `iod_depth` free | 564 | 288 m/s | 50 m/s | 22.6 | +24 ± 12 m/s | +0.69 |
+| `iod_depth` fixed, B stars | 560 | 276 m/s | 77 m/s | 23.4 | +28 ± 12 m/s | +0.67 |
+
+Paired, fixed against free: −7 [−26, +7] m/s, not significant. **A better
+depth model buys nothing.** What limits the fit is the line pattern of an
+atlas scanned from a different cell. Neither an α nor an LSF can supply it;
+only the HIRES cell's own spectrum can. That is option (c) of question 1.
+The new Q&A below asks whether to attempt it before prompt 7.
+
+**Products.**
+- **Fork:** `pyodine/chunks.py`, `pyodine/models/spectrum.py`,
+  `pyodine/plot_lib.py`; `vendor/README.md`.
+- **Code:** `first_hires_exoplanet/reduce_bstars.py`,
+  `first_hires_exoplanet/fit_bstars.py`; `utilities_hires/load_pyodine.py`
+  (`extraction`).
+- **Tests:** `tests/test_fork_chunk_index.py`, `tests/test_adapter_boxcar.py`.
+- **Tables:** `first_hires_exoplanet/data/bstar_chunks.csv` (2.0 MB),
+  `bstar_alpha_map.csv`, `bstar_lsf_models.csv`, `bstar_alpha_payoff.csv`.
+- **Figure:** `docs/figs/fig_p6b_bstars.png`.
+- **Outside the repository:** `redux/reduce_19980826_lsf/` (11 spec1d),
+  `stage_`/`setup_19980826_lsf/`, `pyodine_runs/bstar_alpha_*`.
+
+### Prompt 7: 31 epochs, and the misfit cancels between them
+
+**In one paragraph.** All 31 cell-in epochs fitted, with nothing changed
+since prompt 6 (Q&A answer (a)). The epoch velocities scatter by **55 m/s
+rms**, against 733 m/s for phase 2's cross-correlation on the same frames,
+and most of that 55 m/s is the planet. The adopted per-epoch error is **19
+m/s** (median), and two checks that share no machinery with it say it is
+honest.
+- The per-chunk scatter within an epoch is still 6–7× the photon noise, and
+  still misfit-dominated.
+- But the misfit is the same in every epoch. `pyodine`'s own time-series
+  combination measures each chunk's offset and removes it, and that is what
+  turns a 290 m/s chunk scatter into a 19 m/s epoch.
+
+**What ran.** `first_hires_exoplanet/fit_all_epochs.py` has two modes:
+- `--run`: `pyodine`'s driver, one epoch at a time, in three shards of 4
+  cores each. That is 35–46 s per full-format epoch, about 20 minutes of fitting
+  in all, and 8 minutes of wall time.
+- the analysis: per-chunk tables, the combination, the tables and the
+  figure.
+
+The configuration is prompt 6's: run 0 a single Gaussian, run 1 the
+super-Gaussian, the oversampling-1 template, PypeIt inverse-variance
+weights, α = 2.59 with a free per-chunk `iod_depth`. Run 1's velocities are
+used throughout.
+
+**Which orders.** Each epoch is fitted over the iodine orders phase 2's
+quality filter passes, handed to the driver as its `orders` argument. That is
+the first production use of fork change 5.
+
+| orders fitted | epochs |
+|---|---|
+| 14 | 20 |
+| 11–13 | 5 |
+| 6–8 | 3 |
+| 2 | 3 (07-17, 07-18, 07-19, the last frame of each night) |
+
+18,350 chunks were fitted and 13,950 are good in prompt 5's sense. The
+median χ²_ν, against the measured noise, is 21.4, as in prompt 5.
+
+**Two traps found on the way.** Both were silent.
+1. **An order missing from the extraction is bridged.** `pyodine` maps
+   template order *o* to observation position *o* + `order_correction`, a
+   single shift. 1998-09-13 was extracted with 34 orders and has no order 71
+   (the gap phase 2 left undiagnosed). So the shift sent template order 71
+   onto echelle order 72. Fifty chunks were fitted against the wrong
+   wavelengths and returned velocities of up to 7.7 × 10⁶ m/s. There was no
+   error, and the epoch's `pyodine` error came out at 26 km/s.
+   - `fit_all_epochs.usable_orders` now keeps a template order only if its
+     position holds the same echelle order. `tests/test_epoch_orders.py`
+     tests it.
+   - It is fixed in the caller, not the fork. It belongs in the prompt-10
+     report beside the index trap, since it is the same assumption one level
+     up.
+   - Only 09-13 is affected, and it now fits 13 orders.
+2. **`pyodine`'s example-chunk plots index the chunk list by fixed numbers**
+   (`plot_chunks = [150, 250, 400]`). An epoch with two usable orders has 100
+   chunks, and the plot step raises `IndexError` after the results are
+   written. My driver treats any traceback as failure (prompt 5's rule), so
+   this was caught, not missed. The list is now trimmed per epoch.
+
+Two smaller `pyodine` robustness problems in the combination:
+- `robust.mean` divides by zero on a column with one finite value, so chunks
+  seen in fewer than 3 epochs are blanked (29 of 700).
+- The module's default weighting dictionary is mutated by the first call
+  that uses it implicitly, so a copy is always passed.
+
+**The combination.** `timeseries.combine_vels.combine_chunk_velocities` is
+the iSONG algorithm, run with `pyodine`'s default (SONG) weighting parameters
+on an (epoch × template chunk) array. NaN marks any chunk not fitted or with
+no velocity. The steps:
+1. Each chunk's velocity is referred to its epoch's robust mean.
+2. Its **offset** is the robust mean of that over the time series.
+3. It is weighted by the robust scatter of its own time series.
+4. It is re-weighted per epoch by its deviation.
+
+In the barycentre, `v_bary = v + BVC_epoch − BVC_template`: additive, as in
+phase 2 (the multiplicative term is < 2 m/s here).
+
+**The three scatters, separately.**
+
+| | m/s |
+|---|---|
+| **per chunk, within an epoch**: good chunks, robust, as prompt 5 measured it | **290** (median over epochs) |
+| the same, each chunk's offset removed | 230 |
+| all finite chunks, offset removed (`pyodine`'s `c2c_scatter`) | 383, range 303–683 |
+| chunk offsets: spread between chunks, the part common to every epoch | 201 |
+| each chunk's own time-series scatter | 311 (median) |
+| **per order, within an epoch**: robust scatter of the order means | **55** (median), range 5–117 |
+| **epoch to epoch**: rms over 31 epochs, planet included | **55.3** (robust 66.2) |
+| within a night (7 nights with more than one frame) | median rms 27, worst spread 66 |
+| between nights (19 nightly means) | 52.2 |
+| phase 2's cross-correlation, the same 31 epochs | 733 |
+
+Three things follow:
+- **The misfit that has dominated since prompt 4 is mostly a fixed pattern.**
+  It is a 201 m/s spread of chunk offsets that is the same in every epoch.
+  The iodine pattern of a different cell misfits each chunk the same way
+  every time, so relative velocities lose it. That is the case the Q&A
+  answer (a) bet on.
+- **The per-order scatter is where the systematics show.** Order by order,
+  over the time series (order velocity − epoch velocity):
+  - orders 64–70: **31–42 m/s** rms;
+  - orders 62–63 and 71: 56–65 m/s;
+  - orders 58–61: **97–198 m/s**.
+
+  The red end of the iodine band is again the worst, as in prompt 5. The
+  combination weights it down by its time-series scatter.
+- **The estimator matters.** Against the catalogue orbit (the magnitude check
+  below), the residual rms is:
+
+  | estimator | residual rms |
+  |---|---|
+  | plain median of good chunks (prompt 5's estimator) | 48.5 m/s |
+  | median after removing the chunk offsets (`mdvel`) | 38.9 m/s |
+  | the weighted combination | **26.2 m/s** |
+  | the weighted combination, good chunks only | 26.3 m/s |
+
+  Removing the offsets and weighting by each chunk's time series are both
+  worth having. Pre-selecting "good" chunks adds nothing, because the
+  re-weighting already does it.
+
+**Honest uncertainties.** For each epoch the table carries:
+
+| column | what it is | median |
+|---|---|---|
+| `sig_photon` | photon noise of the good chunks, combined | 1.4 m/s |
+| `sig_pyodine` | `pyodine`'s `rv_err`: the weighted chunk scatter / √N | 10.6 m/s |
+| `sig_order` | std of the order means / √(orders) | 17.3 m/s |
+| **`sig_epoch`** | **the adopted error**: max(`sig_pyodine`, `sig_order`), in quadrature with any excess from night pairs | **19.1 m/s** |
+
+- The chunk-based error assumes independent chunks, and the order-to-order
+  scatter says they are not. So the adopted error takes the larger of the
+  two.
+- **The within-night test.** Four pairs of frames lie closer than 2 h on
+  one night, where the planet moves at most 6 m/s per hour. Their rms
+  difference is 35 m/s, against 44 m/s expected from `sig_epoch`. There is
+  no excess, so σ_extra = 0.
+- **The orbit test (magnitude only).** Minus the modern catalogue's circular
+  orbit (K = 68.3 m/s) with only an offset fitted, the residual rms is
+  **26.2 m/s** and χ²/dof with `sig_epoch` is **1.15**. The errors describe
+  the residuals.
+- The epochs fitted over 2–8 orders have errors built from very few order
+  means. They are the least certain rows of the table.
+
+This is a magnitude check, taken because trap 8 says a plausible wrong answer
+is the normal failure. It is not the assessment, which is prompt 8's. It says
+the result is in the "doing well" range the goals set (below 30 m/s per epoch)
+and not in the suspicious one (below 10).
+
+**A check that shares no machinery with the velocities.**
+- Phase 2's cross-correlation velocity minus the iodine velocity, epoch by
+  epoch, correlates with the difference between PypeIt's ThAr zero point and
+  the iodine-fitted one: r = **+0.982**, slope 0.91, residual 138 m/s
+  (panel c).
+- The two methods disagree by exactly what the ThAr wavelength zero point is
+  wrong by: up to 2.55 km/s, on the borrowed-arc night 1998-07-19.
+- This is phase 2's diagnosis confirmed from the other side. The iodine
+  solution sits −2.6 to +0.95 km/s from PypeIt's.
+- 07-19's three frames, which cross-correlation put at +1.5 to +2.4 km/s,
+  come back at +36, +42 and +96 m/s. Prompt 9 examines this properly.
+
+**Products.**
+- **Code:** `first_hires_exoplanet/fit_all_epochs.py`. `fit_one_epoch.py`
+  gained `run_driver(orders=...)` and an explicit template index in
+  `chunk_table`, which would otherwise have repeated the index trap in the
+  analysis.
+- **Test:** `first_hires_exoplanet/tests/test_epoch_orders.py` (3 tests; 59
+  pass in all).
+- **Tables**, in `first_hires_exoplanet/data/`:
+  - `iodine_velocities.csv`: 31 epochs, with `v_bary`, `sig_epoch` and
+    every component, the three alternative estimators, BVC, counts, χ², the
+    wavelength zero point against PypeIt, and phase 2's velocity;
+  - `iodine_velocities_per_order.csv`: 367 epoch-order velocities;
+  - `iodine_chunks.csv`: 18,350 run-1 chunks, with each chunk's time-series
+    σ and offset (2.3 MB).
+- **Figure:** `docs/figs/fig_p7_epochs.png`. Panel (d)'s ceiling at
+  1000 m/s is `pyodine`'s own clamp on chunk σ (`sig_limit_up`).
+- **Outside the repository:** `pyodine_runs/epochs/`, with each epoch's
+  `pyodine` results and plots, the full per-chunk table
+  (`all_epochs_chunks_run1.fits`) and the analysis log.
+
+### Prompt 8: HD 187123 b detected at 10σ, from an open reduction
+
+**In one paragraph.** On the same frames, the same catalogue and the same
+fit that phase 2 used, the iodine forward model recovers the planet.
+- **K = 72.4 ± 7.1 m/s**, a **10.2σ** detection, against the published
+  72 m/s and the catalogue's 69.2 m/s. Phase 2 got 408 ± 188.
+- The residual is **25.8 m/s per epoch**, and the adopted errors describe
+  it: χ²/dof 1.05.
+- A period search that is not told the period finds **3.0954 d**, with a
+  false-alarm probability of 2 × 10⁻¹¹.
+- Epoch by epoch the velocities follow Teklu et al.'s at r = +0.89, with
+  slope 1.05.
+
+This is the goal the document set: a convincing, independent detection of
+the published Keplerian from a modern open reduction. It is **28× better
+than phase 2** and **22× short of the modern catalogue** on the same photons.
+
+`first_hires_exoplanet/figs_phase3.py` does the assessment:
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.figs_phase3
+```
+
+**Comparable by construction.** The script imports `figs_phase2` and reuses
+its pieces:
+- the catalogue loader, the discovery-era cut and the time matching;
+- the forced-period circular fit `fit_circular` (P = 3.0965828 d, linear, so
+  there is no minimiser);
+- the unweighted K error rescaled by the scatter;
+- the signal-plus-noise correlation test, and the house style.
+
+It feeds these prompt 7's `v_bary` and `sig_epoch` where phase 2 used
+`v_rel` and `sigma_empirical`. Every phase-3 addition below is labelled as
+one. Figure names are `fig_ph3_*`, because `fig_p3_*` belongs to prompt 3.
+
+| figure | what it shows |
+|---|---|
+| `fig_ph3_timeseries.png` | ours and the catalogue over the nine months, **on the same scale** this time |
+| `fig_ph3_phasefold.png` | both folded on 3.0966 d, with residuals: both now trace the Keplerian |
+| `fig_ph3_compare.png` | epoch by epoch, equal aspect; phase 2 in grey, 22 of its 30 points off the frame |
+| `fig_ph3_precision.png` | each stage against K, the 50 m/s target, phase 2 and the catalogue |
+| `fig_ph3_residuals.png` | residuals in time, against the ThAr zero point and the orders fitted, and the period search |
+
+Table: `first_hires_exoplanet/data/iodine_keplerian_residuals.csv`. It has
+each epoch's velocity, error, the catalogue Keplerian, the residual, and the
+catalogue's own velocity where one exists.
+
+**1. The epochs match one to one.** All 30 discovery-era catalogue rows pair
+with one of our epochs, worst time difference 0.1 min, as in phase 2. The
+31st epoch, `HI.19980812.29160`, is the 60 s cell-in frame the catalogue
+never had. We measure it at a residual of −6 ± 12 m/s. The iodine method
+has made one velocity the modern catalogue does not contain.
+
+**2. Against the modern catalogue, epoch by epoch** (30 matched):
+
+| | phase 2 | **phase 3** |
+|---|---|---|
+| catalogue spread (rms) | 47.4 m/s | 47.4 m/s |
+| ours (rms) | 723.5 m/s | **55.8 m/s** |
+| difference (rms) | 706.7 m/s | **25.5 m/s** |
+| correlation r | +0.38 | **+0.89** |
+| r expected for the signal plus our noise | +0.07 | +0.88 |
+| slope, ours on catalogue | — | 1.05 |
+
+- Phase 2's r was "not evidence of anything". Phase 3's r = +0.89 rejects
+  r = 0 at 7.4σ, and it is exactly what the signal plus our own measured
+  noise predicts (+0.88).
+- The difference, 25.5 m/s rms, is our error: at χ²/dof 1.03 against
+  `sig_epoch`, the catalogue's 1.2 m/s being effectively truth. The honest
+  error bar of prompt 7 is honest against an external standard.
+
+**3. Against the published 3.097-day Keplerian.**
+
+| fit | K (m/s) | residual rms | significance |
+|---|---|---|---|
+| Teklu et al. 2025 (phase 2's number) | 69.2 ± 0.3 | 2.2 | 211σ |
+| phase 2, cross-correlation | 408 ± 188 | 668 | 2.2σ, not a detection |
+| **phase 3, exactly as phase 2** (unweighted, error rescaled) | **72.4 ± 7.1** | **25.5** | **10.2σ** |
+| the same, the 30 matched epochs only | 72.2 ± 7.3 | | |
+| *phase 3 addition:* weighted with `sig_epoch` | 78.0 ± 4.9 (χ²/dof 0.99) | 25.8 | 15.9σ |
+| *addition:* orbital phase fixed to the catalogue's | 77.8 ± 4.9 | | 15.8σ |
+
+The phase-3 additions add up to three more results:
+- **Constant against Keplerian** (weighted): χ² 279.2 → 27.6 for two extra
+  parameters. F = 127.6, p = 8.5 × 10⁻¹⁵, **7.8σ**. The planet is required
+  by the data, not just consistent with them.
+- **The orbital phase agrees** with the catalogue's to −3.1° (± ~4°).
+  Leaving out any one night moves K by 74–80 m/s (weighted); 1998-08-25's four
+  frames move it most.
+- **The period, not told:** Lomb–Scargle over 0.5–30 d peaks at
+  **3.0954 d** (the true period is 3.0966 d), with power 0.90 and a
+  false-alarm probability of **2.3 × 10⁻¹¹**. The next peak, 2.80 d (power
+  0.72), is the ~30-day alias of the observing-run sampling:
+  1/2.80 − 1/3.10 ≈ 1/30 d⁻¹.
+
+**What the K numbers say:**
+- Phase 2's method gives 72.4 ± 7.1 m/s: the published 72 m/s almost exactly,
+  and +0.5σ from the catalogue's 69.2.
+- The weighted fit, 78.0 ± 4.9, is +1.8σ above the catalogue. It leans on the
+  best-measured epochs, and a 1.8σ excursion in one of two estimators of the
+  same quantity is not a tension.
+- The answer to report is phase 2's estimator, since that is what makes the
+  two phases comparable. The weighted one is the cross-check.
+
+**4. What the residuals contain.** About the catalogue's Keplerian, offset
+only:
+
+| | |
+|---|---|
+| rms | **25.8 m/s** (robust 22.3) |
+| χ²/dof against `sig_epoch` | **1.05** |
+| largest residuals | −74 (08-26, 6 orders, −1.2σ); +53 (07-19, 2 orders, +2.0σ); −50 (09-12, 7 orders, −1.2σ) |
+| within a night (7 nights, 19 frames), about the nightly mean | 23.2 m/s |
+| between nights (19 nightly means) | 19.8 m/s |
+| period search on the residuals | best 0.94 d, FAP 0.62: nothing |
+
+Six things follow:
+- **Noise, as far as 31 epochs can tell.** χ²/dof is 1.05, no residual
+  periodicity, no excess within a night over between nights. The largest
+  residuals belong to the epochs with the fewest orders, and their errors say
+  so.
+- **The ThAr zero point is gone.** Spearman ρ against PypeIt's wavelength
+  zero-point error is −0.07 (panel b). That error was 2.55 km/s on 07-19 and
+  spans 3.5 km/s across the run, and it was the whole of phase 2's 700 m/s.
+- **The borrowed-arc nights are fixed.**
+
+  | night | phase 3 residuals | phase 2 velocities |
+  |---|---|---|
+  | 1998-07-19 | +5, +3, +53 m/s | +2438, +1609, +1554 m/s |
+  | 1998-09-17 | +1 m/s | +516 m/s |
+
+- **The intra-night drift is gone.** 1998-08-25 spanned 1604 m/s under
+  cross-correlation; its four residuals are +6, +29, +22 and +25 m/s.
+- **The model misfit does not reach the velocities.** Against χ²_ν, ρ =
+  −0.01. So the misfit prompts 4–6 fought is harmless to relative velocities,
+  as prompt 7 found.
+- **One marginal signal: season.** The residuals correlate with the
+  barycentric correction at ρ = +0.40 (p = 0.03), and with time (−0.34) and
+  airmass (+0.34) at p ≈ 0.06.
+  - The three quantities are close to one variable over June–September.
+  - It is one of eight tests, and one p ≈ 0.03 among eight is what chance
+    gives.
+  - It is not a detection of anything. But it is the shape a
+    barycentric-correction or template-epoch error would take, so prompt 9
+    should look.
+  - The multiplicative BVC term that prompt 7 neglected is ≤ 2 m/s here and
+    cannot produce it.
+
+Exposure time, photon noise and the number of orders show nothing:
+|ρ| ≤ 0.07 on the residual, ≤ 0.26 on its magnitude.
+
+**5. The achieved precision, and what it means.**
+
+| | per epoch |
+|---|---|
+| photon noise | 1.4 m/s |
+| adopted error (prompt 7) | 19 m/s |
+| **achieved: residual about the Keplerian** | **25.8 m/s** |
+| the goal: "phase 3 succeeds" | 50 m/s |
+| phase 2, cross-correlation | 724 m/s |
+| Teklu et al. 2025, the same frames | 1.2 m/s |
+| Butler et al. 1998 | 3 m/s (as quoted in the goals) |
+
+At 25.8 m/s with 31 epochs the goals' formula predicts σ_K = 6.6 m/s, an
+11σ detection. The measured result is 7.1 m/s and 10.2σ, so the table in
+`## Goals` was right.
+
+**What this does and does not demonstrate.**
+
+It **does** demonstrate an independent detection of HD 187123 b from the
+1998 discovery frames, with open software end to end:
+- PypeIt's reduction;
+- `pyodine`'s forward model, forked here, with its changes recorded and
+  tested;
+- an iodine atlas from a different cell;
+- no calibration machinery from the discovery pipeline.
+
+The amplitude, the phase and the period all come out right, and the period
+comes out without being given. Phase 2 said "nothing in this result would
+have looked different if HD 187123 b did not exist". That is no longer true:
+without the planet the velocities would scatter 26 m/s about a constant, and
+they scatter 56.
+
+It **does not** match the 1998 result or the modern one.
+- **Against Butler's 3 m/s: about 9× short.**
+- **Against the 1.2 m/s the modern pipeline gets from these frames: 22×
+  short.**
+- The photon noise is 1.4 m/s, so the photons are not the limit. The limits
+  are known from prompts 5–7:
+  - the Fischer atlas is a different cell: its line pattern misfits every
+    chunk at χ²_ν ≈ 20, and only the chunk-offset combination removes most
+    of that;
+  - the red iodine orders (58–61) scatter 100–200 m/s epoch to epoch;
+  - there is no measured instrumental profile beyond a per-chunk
+    super-Gaussian.
+
+Of those, only the first has an identified remedy (the HIRES cell's own
+spectrum, option (c) of the Q&A), and it has not been tried. That should be
+said wherever this result is.
+
+The honest summary for the public document: **the planet is recovered at
+10σ with per-epoch precision of 26 m/s. That is 28× better than a ThAr
+wavelength solution allows, and still an order of magnitude short of what the
+iodine method achieves with the machinery built for this instrument.**
+
+### Prompt 9: what the forward model fixed, and what it did not
+
+**In one paragraph.**
+- **Everything the prompt named as a calibration defect is fixed.** The
+  borrowed-arc nights, the intra-night drifts, the December nights without a
+  pixel flat and 1998-09-13's broken arc all come back into line: none has a
+  residual beyond 2σ, and each is at the level of an ordinary epoch.
+- **The forward model also measures what was wrong.** PypeIt's zero point is
+  off by up to 2.6 km/s, it drifts by up to 256 m/s per hour within a night,
+  and the drift grows with distance in time from the arc.
+- **What is left is not calibration.** It is the four red iodine orders
+  (58–61), where the iodine is weak, and the six epochs with only 2–8 usable
+  orders.
+- **Leaving both out halves the per-epoch residual,** 25.8 → 11.5 m/s, and K
+  stays at 71.8 ± 3.5 m/s.
+- **Tellurics are a small contribution.** The seasonal correlation prompt 8
+  flagged remains marginal and cannot be tested within a night.
+
+`first_hires_exoplanet/diagnose_phase3.py`:
+
+```
+conda run -n pypeit14 python -m first_hires_exoplanet.diagnose_phase3
+```
+
+It reads prompt 7's velocities and chunks, prompt 8's residuals, phase 2's
+cross-correlation and the reductions' own logs and calibrations. It writes
+`data/diagnose_nights.csv` (one row per night: arc, flat, arc quality,
+PypeIt's zero-point error, phase 2 and 3 residuals),
+`data/diagnose_variants.csv` and `docs/figs/fig_p9_diagnosis.png`.
+
+**A measurement phase 2 could not make.** The forward model fits each
+chunk's wavelength solution from the iodine, so `zp = −dv_wave` is PypeIt's
+wavelength zero-point error, measured on the science photons. Across the 31
+epochs it spans **−944 to +2554 m/s** (median |zp| 308 m/s on own-arc
+nights). Phase 2's residual follows it at Spearman **+0.94** (p = 8 × 10⁻¹⁵)
+and phase 3's at +0.07 (panel a). **The whole of phase 2's error was PypeIt's
+zero point, and phase 3 has none of it.** |zp| also grows with the time
+between the science frame and the night's arc (Spearman +0.61, p < 0.001),
+as flexure would.
+
+**1. The borrowed-arc nights: back in line.**
+
+| epoch | arc | PypeIt zp error | phase 2 residual | phase 3 residual |
+|---|---|---|---|---|
+| 07-19 24897 | 07-18's | +2554 m/s | +2132 m/s | +5 ± 13 (+0.4σ) |
+| 07-19 35708 | 07-18's | +1878 | +1296 | +3 ± 15 (+0.2σ) |
+| 07-19 49996 | 07-18's | +1373 | +1237 | +53 ± 27 (+2.0σ; 2 orders) |
+| 09-17 29496 | 09-15's B2 | +620 | +290 | +1 ± 12 (+0.1σ) |
+
+The own-arc epochs' residual rms is 25.3 m/s. The borrowed-arc nights are
+indistinguishable from them, and 07-19's worst point is its 2-order last
+frame, not its arc. Phase 1 concluded "same-night arcs are not required",
+and phase 2 corrected that: "the RMS measures the scatter of the fit, not its
+zero point". Phase 3 makes the point moot. With the iodine, the arc is only
+a starting guess.
+
+**2. The intra-night drifts: gone.** Slopes against UT, fitted within each
+night:
+
+| night | frames, span | phase 2 residual | PypeIt zp error | **phase 3 residual** |
+|---|---|---|---|---|
+| 08-25 | 4, 6.7 h | −240 ± 2 m/s/h (span 1630) | −256 ± 1 m/s/h | **+1 ± 3 m/s/h** (span 23) |
+| 08-26 | 3, 6.9 h | −77 ± 6 (span 538) | −59 ± 16 | **−2 ± 4** (span 65) |
+| 07-19 | 3, 7.0 h | −123 ± 74 (span 896) | −167 ± 27 | **+5 ± 4** (span 50) |
+| 07-18 | 3, 5.6 h | +4 ± 2 (span 23) | −78 ± 37 | +4 ± 6 (span 38) |
+
+- Phase 2's drift on 08-25 and 08-26 was PypeIt's wavelength zero point
+  drifting through the night. The slopes agree to within the errors on 08-25
+  (−240 against −256).
+- Phase 3's residuals about each night's mean give χ²/dof **0.69** over 19
+  frames on 7 nights: no drift, and the within-night errors are if anything
+  generous.
+- The 08-26 B stars show PypeIt's zero point moving by −32 ± 22 m/s/h,
+  consistent with HD 187123's −59 ± 16 on the same night (panel b). But
+  back-to-back B-star pairs 110 s apart differ by 18–121 m/s. With a
+  slit-filling boxcar the B stars are a noisy probe of the wavelength zero
+  point, and they are not needed for this answer.
+
+**3. The December nights: nothing visible.**
+- **1997-12-24's only frame is cell-out.** It can never have an iodine
+  velocity.
+- **1997-12-23** (trace from an iodine-in flat, no pixel or illumination
+  flat) is ordinary on every quantity a flat-field error would move. Against
+  the other 19 epochs with all 14 orders:
+
+  | | 12-23 | others, median | percentile |
+  |---|---|---|---|
+  | χ²_ν (measured noise) | 23.9 | 22.9 | 95 |
+  | per-chunk scatter | 370 m/s | 381 | 32 |
+  | per-order scatter | 60 m/s | 55 | 74 |
+  | good chunks | 561 | 543 | 89 |
+  | **residual** | **−18 ± 23 m/s (−0.8σ)** | | |
+
+- The χ² is 4% above the median. By order, 12-23's chunk χ² runs 0.87–1.39×
+  the other epochs'; the largest excess is order 70 (1.39). That is the only
+  trace of the missing pixel flat, and the model's per-chunk continuum
+  absorbs it.
+- The epoch is 180 days before every other one. It anchors the only long
+  baseline, and it sits on the Keplerian.
+
+**4. 1998-09-13: a bad arc, repaired in zero point but not in noise.**
+- **Why 34 orders.** The night's arc (`HI.19980913.55970`, 15:32 UT)
+  matches PypeIt's ThAr archive at median cc **0.65**, below 0.8 in every
+  order, against 0.91 on every other night.
+  - Orders 92 and 71 failed to reidentify, and order 86 fitted at 0.477 px.
+  - PypeIt flagged all three `BADWVCALIB`, `BADTILTCALIB` and
+    `BADFLATCALIB` and did not extract them: 37 traced, 35 solutions, 34
+    extracted.
+  - The flats are the same 1998-08-12 donors as every other night, and the
+    edges agree with 09-14's to 1 pixel. Their wider traced widths (9.6–10.3
+    px against 8.0–8.3) are untweaked edges on already-masked orders, a
+    consequence and not the cause.
+  - Why the arc itself is poor (lamp, exposure, a changed configuration)
+    would need its raw header and counts; it is left for the PypeIt side of
+    the prompt-10 report.
+- **What the iodine sees.** PypeIt's wavelength solution within each order,
+  as the chunk-to-chunk scatter of `zp`, is **1.3–3.7× the typical epoch's**
+  in every order (panel c): the bad arc degrades the whole solution, not just
+  three orders.
+- **What the forward model makes of it:**
+  - the zero point is repaired: the residual is **−35 ± 46 m/s (−0.8σ)**;
+  - the noise is not: the epoch has the worst per-chunk (511 m/s) and
+    per-order (114 m/s) scatter, higher than every one of the 20 epochs
+    with all 14 orders, so its error is
+    2.8× typical;
+  - the red orders 58–61 deviate by −1.4 to −2.8 of their usual scatter.
+
+  The iodine fit starts from PypeIt's wavelengths and smooths its run-0
+  solution over each order, so a poor starting solution is not fully
+  forgotten. The prompt-7 error bar reflects this honestly, since the epoch
+  gets small weight.
+- **Its chunk χ² is *lower* than typical** (0.6–0.9×), while its velocities
+  scatter more. A loose wavelength solution lets the model fit the misfit
+  away.
+
+**5. What is left.**
+
+*The red orders.*
+
+| order | Å | iodine contrast | stellar contrast | photon σ per chunk | chunk time-series σ | tellurics in chunk |
+|---|---|---|---|---|---|---|
+| 58 | 6143 | 0.07 | 0.07 | 88 m/s | 402 | 0% |
+| 59 | 6040 | 0.11 | 0.03 | 136 | 513 | 14% |
+| 60 | 5940 | 0.16 | 0.04 | 96 | **819** | **97%** |
+| 61 | 5845 | 0.19 | 0.04 | 101 | 606 | 33% |
+| 62–70 | 5095–5750 | 0.25–0.36 | 0.06–0.18 | 25–60 | 169–350 | 0–37% |
+| 71 | 5021 | 0.12 | 0.19 | 55 | 195 | 10% |
+
+- The red orders have **weak iodine** (little to fix the wavelength with) and
+  **weak stellar lines** (little to measure the velocity with). They
+  repeat worst, and over the time series their order velocities scatter by
+  97–198 m/s about the epoch velocity (prompt 7).
+- The combination weights chunks by their own scatter, as if they were
+  independent. But these errors are shared by every chunk in an order, and
+  per-chunk weighting does not down-weight a shift common to a whole order.
+- **Tellurics are a minor part.**
+  - `pyodine`'s CARMENES mask (Wallace 2011, vacuum) puts telluric lines in
+    97% of order 60's chunk-epochs and 33–37% of 61–62's. No telluric mask
+    was used.
+  - Chunks crossed by a line repeat slightly worse overall (269 against 243
+    m/s, Mann–Whitney p = 0.05), but **no worse within orders 60–62**
+    (322 against 311, p = 0.48).
+  - Masking every crossed chunk in every epoch lowers the residual only from
+    25.8 to 24.2 m/s.
+  - Orders 58–59 have almost no telluric lines and are still bad.
+
+  **The red orders are bad because the iodine is weak, not mainly because of
+  the atmosphere.**
+
+*The weak epochs.* Six epochs have 2–8 usable iodine orders:
+- the last frames of 07-17, 07-18 and 07-19 (2 orders each);
+- 07-18 38646 (8), 08-26 19932 (6) and 09-12 (7).
+
+They are the ones phase 2's quality filter cut hardest, and their residuals
+are the largest in absolute terms. Their errors are correspondingly large.
+
+*What each costs.* `pyodine`'s combination re-run on subsets (re-combining
+prompt 7 unchanged reproduces its velocities to 0.2 m/s). The error column
+is prompt 7's `sig_epoch`, so a χ²/dof below 1 means those errors are now too
+large.
+
+| variant | epochs | residual rms | χ²/dof | K (phase-2 method) | significance |
+|---|---|---|---|---|---|
+| prompt 7, everything | 31 | 25.8 m/s | 1.07 | 72.4 ± 7.1 | 10.2σ |
+| without the borrowed-arc, December and 09-13 epochs | 25 | 24.6 | 1.07 | 69.5 ± 8.0 | 8.7σ |
+| telluric-crossed chunks masked | 31 | 24.2 | 0.94 | 73.0 ± 6.7 | 10.9σ |
+| without the 6 epochs of ≤ 8 orders | 25 | 18.2 | 0.84 | 70.8 ± 5.6 | 12.6σ |
+| tellurics masked, orders 58–59 dropped | 31 | 19.4 | 0.74 | 73.8 ± 5.3 | 13.9σ |
+| **without orders 58–61** | 31 | **17.2** | 0.60 | 72.4 ± 4.7 | 15.4σ |
+| **without orders 58–61 and the 6 weak epochs** | 25 | **11.5** | 0.43 | 71.8 ± 3.5 | 20.3σ |
+
+- **Removing the nights the prompt asked about changes nothing** (24.6 m/s).
+  They are fixed.
+- **The red orders are the largest single item.** Dropping them alone takes
+  a third off the residual.
+- **K does not move** (69.5–73.8 m/s) under any variant. The detection does
+  not depend on any of these choices.
+
+A caution on the variants. Neither criterion used the Keplerian: the red
+orders were singled out by their own time-series scatter (prompt 7) and the
+weak epochs by phase 2's quality filter. But the decision to try them was
+made after prompt 8's residuals were seen. The headline stays prompt 7's; see
+the Q&A.
+
+*The seasonal correlation* (prompt 8: ρ = +0.40 with BVC):
+- The residual slope is +0.75 ± 0.45 m/s per km/s of BVC (1.7σ). Over the
+  1998 season BVC and time are the same variable (Pearson r = −1.00), so no
+  test across nights can tell them apart.
+- **Within nights**, BVC changes by Earth's rotation (up to 0.66 km/s) while
+  the season does not. Over 18 pairs the slope is −26 ± 15 m/s per km/s:
+  consistent with zero, and with +0.75 at 1.8σ. That lever is 30× weaker
+  than the seasonal one, so it can neither confirm nor exclude a
+  BVC-proportional error.
+- Without the 1997 epoch the slope is +0.70 ± 0.46.
+- **Verdict: marginal, and not attributable.** The candidate mechanisms
+  (the ≤ 2 m/s multiplicative BVC term; the template's wavelength scale;
+  tellurics sweeping through chunks) are each too small on the numbers
+  above. With 31 epochs this is not worth more.
+
+**What the forward model fixed, and what it did not.**
+
+| | fixed? | evidence |
+|---|---|---|
+| the ThAr wavelength zero point (phase 2's whole 700 m/s) | **yes** | residual vs PypeIt zp: ρ +0.94 → +0.07 |
+| borrowed arcs (07-19, 09-17) | **yes** | 1.2–2.1 km/s → +0.1 to +2.0σ |
+| intra-night drift (08-25, 08-26, 07-19) | **yes** | −240 m/s/h → +1 ± 3 m/s/h; within-night χ²/dof 0.69 |
+| no pixel flat (1997-12-23) | **yes**, to 4% in χ² | −0.8σ, ordinary in every metric |
+| a bad arc (1998-09-13) | **zero point yes, noise no** | −0.8σ, but the epoch's error is 2.8× typical |
+| a missing extracted order (09-13) | by the caller, not the model | `usable_orders` (prompt 7) |
+| the atlas's line pattern (a different cell) | **mostly**, by the chunk offsets | 290 → 230 m/s per chunk; 48.5 → 26 m/s per epoch |
+| weak iodine in orders 58–61 | **no** | 97–198 m/s per order; worth 25.8 → 17.2 m/s |
+| epochs with few usable orders | **no**: extraction, not model | worth 25.8 → 18.2 m/s |
+| tellurics | not modelled; minor | worth 25.8 → 24.2 m/s |
+| a seasonal/BVC term | undetermined | +0.75 ± 0.45 m/s per km/s |
+
+**Products.**
+- **Code:** `first_hires_exoplanet/diagnose_phase3.py`.
+- **Tables:** `first_hires_exoplanet/data/diagnose_nights.csv` (20 nights)
+  and `diagnose_variants.csv`.
+- **Figure:** `docs/figs/fig_p9_diagnosis.png`:
+  - (a) residual against PypeIt's zero-point error, phases 2 and 3;
+  - (b) the 08-25 and 08-26 drifts;
+  - (c) PypeIt's within-order solution as the iodine sees it, with 09-13 and
+    12-23;
+  - (d) residual against BVC.
+
+### Prompt 10: the upstream reports, drafted and not sent
+
+**Two drafts, not one.** The prompt names Ryan Cooke, and the PypeIt items
+go to him. But half of what phase 3 found is in `pyodine`, whose authors are
+Paul Heeren, René Tronsgaard and Frank Grundahl. Sending those items to
+PypeIt would reach nobody who can act on them. So there are two drafts, both
+in `docs/upstream/`, and **neither has been sent**:
+
+| draft | to | items |
+|---|---|---|
+| `pypeit_report_draft.md` | Ryan Cooke | 15, plus an information section and three usability notes |
+| `pyodine_report_draft.md` | the `pyodine` authors | 6 fork changes and 15 found-and-worked-around, plus one note on the combination |
+
+**The PypeIt report.**
+- **Items 1–9** are phase 1's. The fixes for 1–5 and the docstring in 9 are
+  on `origin/orig-hires-fixes` at `017bece06`, which is `develop` at
+  `f3a1f1d27` plus one commit touching only `keck_hires.py`. No PR has been
+  opened.
+- **Items 10–11** are phase 2's `core/wave.py` findings.
+  - The solar-term sign error is **still in `develop`**, at `wave.py:128`
+    (phase 2 cited the function at line 89).
+  - Re-run over all 36 epochs, `refframe_audit.py` gives PypeIt's
+    heliocentric correction +9.1 to +14.2 m/s off, drifting 5.16 m/s, and
+    its barycentric correction −4.6 m/s off. These are phase 2's numbers.
+- **Items 12–15 are new in phase 3:**
+  - **12:** the inverse variance is 2.35× too large for the optimal
+    extraction and 1.61× too small for the boxcar. The gain explains 1.59×
+    of the first.
+  - **13:** `OPT_WAVE` is exactly 0 at masked pixels. Checked here: 950 of
+    950 zero wavelengths in one epoch fall on masked pixels.
+  - **14:** boxcar flux in a partially masked aperture is biased low and not
+    flagged. Checked here: 1,730 pixels (6%) have `BOX_NPIX` below 75% of
+    the aperture, their flux sits at 0.51 of the continuum (r = 0.84 with the
+    fraction summed), and `BOX_MASK` is True.
+  - **15:** orders that fail calibration vanish from the `spec1d` with only
+    an INFO line (1998-09-13).
+- **Section E** gives, for information, what the iodine measures of PypeIt's
+  ThAr zero point. **Section F** carries phase 2's three usability notes.
+
+**Checks made while drafting.**
+- `verify_orig_fixes.py` runs cleanly.
+- `refframe_audit.py` had been globbing `reduce_1998*`. That now also caught
+  the B-star reduction `reduce_19980826_lsf/` (11 frames of other stars), and
+  it has always missed December 1997. It now globs `reduce_19` followed by
+  exactly six digits: all 36 HD 187123 frames and nothing else.
+  - `data/refframe_audit.csv` grows from the 10 July rows committed in phase 2
+    to 36.
+  - The drift numbers quoted in the report come back exactly (5.16 m/s
+    peak-to-peak; −4.6 m/s barycentric).
+  - The one-epoch breakdown in section 5 now uses 1997-12-23 as its first
+    epoch (+13.33 m/s where the July epoch gave +13.09).
+
+**The `pyodine` report.**
+- **Changes 0–5** of the fork (`vendor/README.md`), each with its test.
+- **Fifteen items worked around rather than changed:**
+  - the `order_correction` gap;
+  - the inverted Chauvenet condition;
+  - `red_chi_sq` holding √χ²_ν;
+  - the `jansson` adjoint;
+  - the `misc.rebin` spline at HIRES sampling;
+  - the `fit_lsfs` 10⁻¹² starts;
+  - `NormalizedObservation` dropping `ivar`;
+  - `create_template`'s bad-pixel mask;
+  - the air-wavelength Arcturus reference;
+  - the atlas mean normalisation;
+  - swallowed exceptions, re-read in the source for the draft:
+    `create_template` logs with `logging.error`, and only
+    `model_single_observation` uses `logging.info`;
+  - the plot-then-fork hang;
+  - fixed `plot_chunks`;
+  - `robust.mean` dividing by zero;
+  - the mutated weighting default.
+- It closes with prompt 9's point about order-level weighting.
+
+### Prompt 11: the phase-3 assessment
+
+**Phase 3 succeeded by the measure it set itself, and fell an order of
+magnitude short of the 1998 result.**
+- **The planet is detected** at 10.2σ from an independent, open reduction:
+  K = 72.4 ± 7.1 m/s, against 72 m/s published (Butler et al. 1998) and
+  69.2 m/s from the modern catalogue. The goal was a detection at 50 m/s per
+  epoch.
+- **The per-epoch precision is 25.8 m/s**, inside the "below 30 m/s we are
+  doing well" line and outside the "below 10, be suspicious" one.
+- **It is 28× better than phase 2** (716 m/s about the same orbit, same
+  frames).
+- **It is about 9× short of the 3 m/s the method was built for, and 12× short
+  of the modern pipeline** on these photons (2.2 m/s about the orbit). The
+  photon budget is 1.4 m/s.
+
+Following the Q&A after prompt 9 (answer (a)), prompt 7's velocities are
+phase 3's result. The prompt-9 variants (11.5 m/s) are reported as what a
+better combination would reach, not as the result.
+
+All numbers below are from committed products:
+- `data/iodine_velocities.csv`;
+- `data/iodine_keplerian_residuals.csv`;
+- `data/diagnose_variants.csv` and `data/diagnose_nights.csv`;
+- `data/lsf_models_summary.csv` and `data/bstar_alpha_payoff.csv`;
+- the `figs.py` printout for the public figures.
+
+#### What was achieved
+
+| | |
+|---|---|
+| epochs | 31 cell-in frames, 19 nights, 1997-12-23 to 1998-09-18 |
+| chunks fitted | 18,350 (13,950 good) |
+| K, period fixed (phase 2's method) | **72.4 ± 7.1 m/s, 10.2σ** |
+| K, weighted | 78.0 ± 4.9 m/s |
+| period, not told | 3.0954 d (true 3.0966), FAP 2 × 10⁻¹¹ |
+| orbital phase against the catalogue | −3° (± ~4°) |
+| residual about the catalogue orbit | **25.8 m/s**, χ²/dof 1.05 against the adopted errors |
+| ours − catalogue, epoch by epoch | 25.5 m/s rms, r = +0.89 |
+| adopted per-epoch error | 19.1 m/s (median); honest against the catalogue (χ²/dof 1.03) |
+| photon noise per epoch | 1.4 m/s |
+| per-chunk scatter within an epoch | 290 m/s; 230 m/s with the chunk offsets removed |
+| per-order scatter within an epoch | 55 m/s |
+
+The chain the result rests on:
+- **PypeIt** 2.0.2.dev1217+g017bece06 (branch `orig-hires-fixes`, `develop`
+  `f3a1f1d27` plus one commit to `keck_hires.py`);
+- **`pyodine`** at `4488b0914fe5b272b787982647691045bff2604a`, plus fork
+  changes 0–5 (`vendor/README.md`);
+- the **Fischer May 2022 atlas** (SHA-256 `3ae788e7…a55a429`) at α = 2.59
+  with a free per-chunk depth;
+- the **oversampling-1 deconvolved template** from the three 1998-08-26
+  cell-out exposures;
+- the **super-Gaussian** instrumental profile.
+
+#### How it got there: what each prompt settled
+
+| prompt | settled | what it turned out to matter |
+|---|---|---|
+| 1–2 | fork vendored; NumPy 2 + four HIRES changes, each tested | the air/vacuum and depth-model changes were prerequisites: 83 km/s and negative transmission otherwise |
+| 3 | template deconvolved; the `misc.rebin` spline breaks it at HIRES sampling | oversampling 1; −4 to −9% on the scatter |
+| 4 | one chunk fits; noise scale 0.426 measured | the model misfit (χ²_ν ≈ 20) is not noise |
+| 5 | one epoch: right velocity, wrong iodine | misfit follows iodine contrast (partial ρ ≈ +0.7) |
+| 6 | LSF: super-Gaussian, a ≤ 5% lever | the prompt expected the largest lever; it was not |
+| 6 cont. | index trap fixed; B stars: α = 3.33; per-chunk α buys nothing | the atlas's *line pattern*, not its depth, is the misfit |
+| 7 | all epochs; the misfit is common to every epoch | chunk offsets cancel it: 48.5 → 26 m/s |
+| 8 | detection, 10σ, comparable to phase 2 | errors honest against the catalogue |
+| 9 | every named calibration defect fixed | what is left is weak red iodine and weak epochs |
+| 10 | upstream reports drafted | 15 PypeIt items, 21 `pyodine` items |
+
+**The decision that mattered most** was the Q&A before prompt 7: run the
+full time series before trying to repair the atlas. A misfit that looked
+fatal on one epoch (χ²_ν ≈ 22, per-chunk scatter 6–7× photon noise) was
+mostly a fixed pattern that `pyodine`'s own combination removes. Building an
+empirical HIRES-cell spectrum first would have cost the most effort for the
+part of the error that cancels anyway.
+
+**The prediction that failed** was the document's own. It said the
+instrumental profile was "probably the single biggest lever on the result".
+Four LSF models tie to ±5%. The iodine atlas was the lever, and even that
+mostly cancels.
+
+#### Where phase 3 fell short of 1998, and why
+
+In order of what each costs, from prompts 7 and 9:
+1. **The atlas is a different cell.** It misfits every chunk at χ²_ν ≈ 20.
+   The chunk offsets remove the fixed part (201 m/s spread). What varies
+   between epochs leaves 230 m/s per chunk against ~45 m/s photon noise. Only
+   the HIRES cell's own spectrum would remove this, and no FTS scan of it has
+   been found.
+2. **The weak-iodine red orders (58–61).** Their order velocities scatter by
+   97–198 m/s over the time series. Chunk weights cannot see an error shared
+   by a whole order. They are worth 25.8 → 17.2 m/s.
+3. **Six epochs with 2–8 usable orders.** This is extraction quality inherited
+   from phase 2's filter. They are worth 25.8 → 18.2 m/s.
+4. **A simple instrumental profile** (a four-parameter super-Gaussian per
+   chunk) against the multi-Gaussian IP the Lick/Keck pipeline refined over
+   years. Among the models tried it is ≤ 5%. A better one has not been tried.
+5. **Tellurics** (not modelled): 25.8 → 24.2 m/s.
+6. **A marginal seasonal term:** +0.75 ± 0.45 m/s per km/s of BVC. It cannot
+   be separated from time in this season.
+
+Items 2 and 3 together: 11.5 m/s. Everything named in prompt 9's question
+(borrowed arcs, drifts, flats, 09-13's arc) is fixed and costs nothing.
+
+#### What phase 3 did not do, and what a phase 4 would need
+
+- **A HIRES-cell spectrum.** An FTS scan of the Keck cell, if one exists, or
+  the empirical B-star cell spectrum the Q&A after prompt 6 deferred.
+  Expected to be the largest remaining gain.
+- **Order-level weighting in the combination** (Q&A after prompt 9, option
+  (b)). It is principled and Keplerian-free, and would recover most of item 2
+  without hand selection. Any version run now has been informed by seeing
+  the residuals.
+- **The PypeIt noise model** (upstream item 12). The inverse variance is 2.35×
+  too large (optimal) and 1.61× too small (boxcar). It leaves χ² values only
+  comparable within one extraction.
+- **The 1998-09-13 arc.** Why it is poor (cc 0.65) is not diagnosed.
+- **The second planet.** HD 187123 c's ten-year orbit is invisible in nine
+  months and was never in scope.
+
+#### The fork, the tests and the upstream reports
+
+- **The fork:** six changes (`vendor/README.md`), each with a test that fails
+  without it.
+- **Caller-side fixes** in `utilities_hires` and the phase-3 drivers: the
+  zero-wavelength and zero-flux repairs, `proper_motion`, the boxcar
+  extraction, `start_inside`, the echelle-matched order selection, and the
+  plot-chunk trim.
+- **Tests:** 59 pass.
+- **Upstream reports** are in `docs/upstream/`. By the Q&A after prompt 10:
+  - you send them;
+  - the PypeIt items go as an email to Ryan Cooke, then GitHub issues and a
+    PR from `orig-hires-fixes`;
+  - the `pyodine` items go as GitHub issues on `pepeheeren/pyodine`. The
+    draft is written as a letter and will need splitting into issues.
+
+  Nothing has been sent from this side.
+
+#### Did phase 3 meet its own success criterion?
+
+"Phase 3 succeeds at 50 m/s per epoch": a convincing, independent detection
+of the published Keplerian from a modern open reduction.
+- **Precision:** 25.8 m/s per epoch, against the 50 m/s target. ✓
+- **Detection:** 10.2σ at the published period, and 3.0954 d found without
+  being told. ✓
+- **Independent:** no code, velocities or calibration from the discovery
+  pipeline. The catalogue enters only in the assessment. ✓
+- **Open:** PypeIt and `pyodine`, both public, with every change recorded
+  and tested. ✓
+- **"Both of those facts should be stated plainly":** the result is 28× better
+  than phase 2, and ~9× short of Butler (12× of the modern pipeline). It is
+  stated so here and in `docs/public_HD187123b.md`. ✓
+
+**Phase 3 is complete.**
+
+#### The public document
+
+`docs/public_HD187123b.md` gains two sections before the References:
+- **"Going back to the 1998 spectra"** covers the three stages: the PypeIt
+  reduction and its three detector bugs; the lamp-calibrated attempt and why
+  it failed; the iodine forward model and the recovered planet;
+- **"Where we fell short, and why"** says it plainly: 26 against 3 and
+  2.2 m/s, with the reasons in plain language and the 12 m/s variant
+  explicitly not claimed.
+
+The closing paragraph of "What happened next" no longer says "we have not
+done it yet". Two figures are added to `figs.py`:
+- `fig7_three_ways.png`: the same frames folded three ways, the phase-2 panel
+  on a 16× larger scale;
+- `fig8_precision.png`: scatter about the orbit, 716 / 26 / 2.2 m/s against
+  K.
+
+Figures 1–6 were restored from `HEAD` after regeneration, because a
+different Matplotlib renders them byte-differently with no change of
+content.
+
 ## Logs
 
 ### 2026-09-23 (Prompt 1: `pyodine` vendored at a recorded commit; it needs two NumPy 2 fixes before it runs)
@@ -1550,3 +3096,705 @@ their own directory: `1998aug26_lsf/`, like phase 1's `inspect_only/`.
 **Whether any git command changed state.** No. Only read-only `git status`,
 `git log` and `git check-ignore`. The prompt-3 files you had staged are as you
 left them.
+
+### 2026-09-29 (Prompt 5: one epoch end to end through `pyodine`'s own driver)
+
+**Task.** Fit one epoch end to end across all usable iodine orders. Report
+the per-chunk velocity scatter, the chunk failures, the LSF against position
+and the runtime. Compare the fitted continuum and wavelength solution with
+PypeIt's. Findings in `## Report`, "Prompt 5: one epoch, end to end — right
+velocity, wrong iodine". There were no new Q&A answers since prompt 4, and
+the four decisions from after prompt 3 still apply: both templates were
+fitted, and the weights stayed PypeIt's.
+
+**What was done.**
+
+- Chose `HI.19980825.19425`, the best cell-in epoch with all 14 iodine orders
+  usable. This is forced by an index trap found while reading
+  `auto_wave_comoving`.
+- Ran `pyodine_model_observations.model_single_observation` unchanged
+  through `utilities_hires`, against both prompt-3 templates.
+- The first run fitted every chunk and then failed to save: the adapter's
+  `Star` lacked `proper_motion`, and the driver said so only in its info log.
+  Fixed test-first (`tests/test_adapter_results_io.py`, two tests).
+- Wrote `first_hires_exoplanet/fit_one_epoch.py`, which:
+  - runs the driver and treats an empty error log as proof of nothing;
+  - builds a per-chunk table: every parameter and error, χ² on both noise
+    scales, photon-noise velocity error, the wavelength offset against
+    PypeIt, the de-normalised continuum against `OPT_FLAT`, the evaluated
+    LSF's FWHM/centroid/asymmetry, and the iodine and stellar contrast;
+  - flags five kinds of failure;
+  - bins the LSF against the same night's ThAr;
+  - correlates the misfit with iodine and stellar structure.
+- Ran it twice in full. The numbers reproduce exactly.
+- Added a second Q&A round for prompt 6.
+
+**Headline results.**
+- 700 chunks per run, in 48–59 s per template for both runs.
+- No lmfit failures, but ~8.5% of chunks without uncertainties. About 80%
+  are good by all five tests.
+- Epoch median velocity −677 m/s (os 10, run 1) against −689 expected, with
+  an error of ~13 m/s.
+- Per-chunk robust σ 287–340 m/s, 6–7× the ~40–48 m/s photon noise.
+  χ²_ν ≈ 23 against the measured noise.
+- The misfit tracks iodine contrast (partial ρ ≈ +0.7), not stellar (+0.1).
+- Stellar LSF ≈ 2.0 px, varying 1.6–2.6 px with order and position. The same
+  night's ThAr is 2.51 px, where 08-26's was 2.18.
+- Fitted wavelengths sit −0.95 km/s from PypeIt's, with 130–150 m/s
+  order-to-order scatter and order-edge structure.
+- The continuum follows PypeIt's blaze to 2.4% chunk to chunk, after
+  de-normalisation.
+
+**What this taught us about the repository and the data.**
+
+*The driver's chunk indexing is a silent trap for this data set.*
+`auto_wave_comoving` builds chunks only for the orders it is given, while
+the model fetches template chunk *i* for observation chunk *i*. On any subset
+of orders every later chunk is modelled against the wrong stretch of
+spectrum, with no error, because the template spline extrapolates. 11 of the
+31 cell-in epochs have a rejected iodine order. This must be settled before
+prompt 7 (Q&A after prompt 5, question 2).
+
+*`pyodine`'s error log is not where its errors go.*
+`model_single_observation` reports its own crash with `logging.info`. The
+first run crashed after fitting every chunk and left an empty `errors.log`.
+Any batch driver in prompt 7 must check for result files and scan the info
+log.
+
+*The adapter's contract gaps surface one driver step at a time.* Zero
+wavelengths broke the velocity guess (prompt 3), zero-flux runs broke the
+chunking (prompt 4), and a missing `proper_motion` broke the saving (here).
+Each was invisible to the step before. The adapter now has an end-to-end
+test for every stage the driver reaches, which is the only kind that has
+caught any of them.
+
+*The fit is limited by the iodine model, and one statistic shows it.* The
+per-chunk misfit correlates with how much iodine structure a chunk carries,
+with the stellar structure held fixed, and hardly at all the other way
+round. That separates the three candidates prompt 4 could not:
+- an LSF error would misfit both components;
+- a template error would follow the star;
+- an atlas that is the wrong cell follows the iodine, and that is what the
+  data show.
+
+It changes what prompt 6 is for.
+
+*The ThAr cannot stand in for the stellar profile, in either direction.* On
+08-26 the arc (2.18 px) was broader than the star (~2.05). On 08-25 the arc
+is 2.51 px and the star is still ~2.0. The star's LSF is steadier than the
+arc's, which makes sense if the star under-fills the slit and the arc does
+not. The B stars on disk are the right measurement.
+
+*The half-km/s wavelength offset from prompt 4 is not a constant.* It is
+−0.95 km/s here against −0.55 on 08-26. It is structured along the band and
+at the order ends, where a per-order polynomial is weakest. That fits
+phase 2's diagnosis, that PypeIt's ThAr zero point is what failed, and it
+does not fit a fixed error in the atlas. It is two epochs, so it is a lead,
+not a result.
+
+*The epoch velocity is already good; the chunk velocities are not.* A 13 m/s
+epoch error from chunks that each scatter by 300 m/s holds only if the chunk
+errors are independent. The order-to-order scatter (64–154 m/s) is larger
+than within-order scatter would predict, so they are not fully independent.
+Prompt 7's epoch-to-epoch scatter is the test that matters.
+
+*The template's oversampling barely matters to the forward model.* The
+re-convolution failure that dominated prompt 3 moves the epoch statistics by
+a few percent. It matters less than the iodine model by an order of
+magnitude.
+
+**Files added / modified.**
+- Added:
+  - `first_hires_exoplanet/fit_one_epoch.py`;
+  - `first_hires_exoplanet/tests/test_adapter_results_io.py`;
+  - `first_hires_exoplanet/data/one_epoch_chunks.csv`, `one_epoch_summary.csv`
+    and `one_epoch_lsf.csv`;
+  - `docs/figs/fig_p5_one_epoch.png`.
+- Modified: `first_hires_exoplanet/utilities_hires/load_pyodine.py`
+  (`Star.proper_motion`).
+- Outside the repository:
+  `../first-hires-exoplanet-data/pyodine_runs/HI.19980825.19425_os10/` and
+  `_os1/` (`pyodine`'s result files, logs and diagnostic plots).
+- Nothing in `vendor/pyodine/` was changed.
+
+**Whether any git command changed state.** No. Only read-only `git status`
+and `git log`.
+
+### 2026-09-29 (Prompt 6: five LSF models compared; the super-Gaussian chosen; the LSF is a ≤5% lever)
+
+**Task.** Settle the instrumental profile: compare `pyodine`'s LSF models on
+the prompt-5 epoch, choose one on evidence, and report how much the
+per-chunk scatter depends on the choice. Findings in `## Report`, "Prompt 6:
+the LSF is settled, and it is not the lever". The three Q&A questions after
+prompt 5 were unanswered, so this ran as written (question 1, option a).
+Nothing was reduced and the fork was not changed.
+
+**What was done.**
+- Wrote `first_hires_exoplanet/compare_lsf_models.py`, which runs prompt 5's
+  driver (`fit_one_epoch.run_driver`) once per run-1 model and template, 10
+  runs:
+  - run 0 is a single Gaussian;
+  - run 1 is one of single, super, Lick multi-Gaussian, SONG multi-Gaussian
+    or Hermite;
+  - run 2 smooths run 1's LSF (±160 px, ±3 orders, order separation 71
+    physical px measured from the traces) and holds it fixed.
+- The first pass returned the super-Gaussian and Hermite fits unmoved from
+  their start. Diagnosed from the saved fit reports, fixed with a start rule,
+  and rerun.
+- Added paired bootstraps against the prompt-5 configuration and between
+  templates.
+- Settled the choice in `utilities_hires/pyodine_parameters.py`:
+  - run 1 is the super-Gaussian, with physical bounds and `start_inside`;
+  - the same in `Template_Parameters`;
+  - `osample_temp = 1`.
+- Added `tests/test_lsf_settled.py` (seven cases). Made `misfit_drivers`
+  tolerate an empty set. Made a `--skip-run` pass keep the last runtimes.
+- Updated `fit_one_epoch.py`'s docstring. Added a note under the open
+  question 1.
+
+**Headline results.**
+- **The four workable models are indistinguishable:** robust per-chunk σ
+  278–319 m/s, and every paired change against the Lick multi-Gaussian
+  within ±13 m/s with a 68% interval including zero.
+- **Hermite is worse (+92 to +108 m/s) and biases the epoch by +130 m/s.**
+- **Run 2's smoothed fixed LSF never helps.** It costs good chunks and can
+  bias the epoch by 3–5σ.
+- **The oversampling-1 template lowers scatter** by 11–28 m/s for the same
+  four models.
+- **Chosen:** the super-Gaussian (tied-best scatter, lowest χ²_ν, centred, 4
+  parameters) with the oversampling-1 template.
+- **Every model finds the same profile:** FWHM 2.0–2.05 px, symmetric.
+- **The iodine correlation of the misfit is unchanged by any of them.**
+
+**What this taught us about the repository and the data.**
+
+*The prompt's premise was wrong, and the data say so cleanly.* The LSF was
+expected to be the largest lever; among the models that work it is under
+5%. That is not because the profile does not matter. The models all find
+the same profile (FWHM ~2.0 px, symmetric), and the residual that limits
+the chunks is elsewhere. With prompt 5's partial correlation, the ranking
+now reads: the iodine model first, then everything else together at the
+~10% level.
+
+*A flexible model started at zero is a rigid one.* `fit_lsfs` hands run 1 a
+start in which every non-Gaussian shape parameter is ~10⁻¹², and `lmfit`'s
+leastsq steps relative to the value, so those parameters cannot move. When
+they cannot, nothing moves: the super-Gaussian's first attempt returned
+every chunk at run 0's median velocity, a robust σ of *exactly zero*, which
+looks like the best result in the table unless one asks whether it is
+physically possible. Hermite returned "uncertainties could not be
+estimated" 700 times. SONG's own configuration, which bounds its Hermite
+weights at ±2×10⁻¹³, looks like someone hitting this and pinning the
+parameters rather than fixing the start. The start rule now lives in
+`pyodine_parameters` and is tested.
+
+*Flexibility the data cannot support buys bias, not precision.* The Hermite
+model is the most flexible that converges. It fits worse (χ²_ν 33–35), finds
+an asymmetry no other model sees, and moves the epoch 130 m/s. An LSF shape
+term is degenerate with velocity, and at χ²_ν ≈ 23 the fit uses every
+degree of freedom it is given to chase the iodine misfit.
+
+*Per-chunk LSF freedom is absorbing something, and smoothing it away shows
+this.* Holding a smoothed LSF fixed is the Butler/Lick practice, and here it
+raises χ², loses chunks and biases the epoch. On well-modelled data,
+smoothing an LSF only removes noise. Here it removes a per-chunk degree of
+freedom that was compensating for the atlas. That is one more sign of an
+iodine-model problem, and a reason not to adopt run 2 until the atlas is
+addressed.
+
+*Model-selection statistics are not evidence at χ²_ν ≈ 23.* BIC ranks the
+10-parameter Lick multi-Gaussian first, but its velocities are no better.
+With systematic misfit, a likelihood criterion measures flexibility. The
+decision was taken on paired velocity scatter, which is what an RV depends
+on.
+
+*The template question is closed.* Across four models, paired, oversampling
+1 beats 10 by 11–28 m/s of per-chunk scatter. Prompt 3's spline finding
+shows up in the velocities, modestly.
+
+*Analysis-only reruns must not overwrite what they cannot recompute.* The
+first `--skip-run` pass wrote a summary with blank runtimes over the one
+with real ones. It now carries runtimes forward.
+
+**Files added / modified.**
+- Added:
+  - `first_hires_exoplanet/compare_lsf_models.py`;
+  - `first_hires_exoplanet/tests/test_lsf_settled.py`;
+  - `first_hires_exoplanet/data/lsf_models_summary.csv`,
+    `lsf_models_chunks.csv` (1.9 MB) and `lsf_models_template_pairs.csv`;
+  - `docs/figs/fig_p6_lsf_models.png`.
+- Modified:
+  - `first_hires_exoplanet/utilities_hires/pyodine_parameters.py` (settled
+    LSF, `start_inside`, `lsf_bounds`, `SUPER_BOUNDS`, `osample_temp = 1`);
+  - `first_hires_exoplanet/fit_one_epoch.py` (empty-set guard, docstring);
+  - this document's Q&A (a note under question 1 after prompt 5).
+- Outside the repository: `../first-hires-exoplanet-data/pyodine_runs/lsf_*`
+  (10 run directories).
+- Nothing in `vendor/pyodine/` was changed.
+
+**Whether any git command changed state.** No. Only read-only `git status`,
+`git log` and `git diff --stat`.
+
+### 2026-09-29 (Prompt 6, continued: index trap fixed in the fork; B stars reduced and fitted; per-chunk α buys nothing)
+
+**Task.** Act on the three Q&A decisions after prompt 5:
+1. fit the B stars with a per-chunk α, then compare LSF models;
+2. fix the index trap in the fork;
+3. reduce the B stars.
+
+Findings in `## Report`, "Prompt 6, continued".
+
+**What was done.**
+- **Fork change 5, test first.** `auto_wave_comoving` records
+  `chunk.template_index`, and the model and plots resolve the template
+  through `template_chunk_index`. `tests/test_fork_chunk_index.py`;
+  `vendor/README.md` now lists all six fork changes.
+- **Wrote `reduce_bstars.py`.** It stages the night's arc and donor flats
+  with the B-star frames, reuses the night's parameters and calibrations,
+  and adds `force_center_obj = True`.
+  - The first run stopped at HR 8634 (37323), found in 1 of 37 orders. I
+    began a frame-by-frame workaround; you pointed to the Shane/Hamspec fix
+    (`force_center_obj`); with it all 11 frames extract.
+  - Added `extraction='BOX'` to the adapter (`tests/test_adapter_boxcar.py`),
+    because the optimal mask collapses on slit-filling stars.
+- **Wrote `fit_bstars.py`:** `pyodine`'s hot-star path on the template's
+  chunk grid, with `BadPixelMask` on each frame.
+  - Fitted 10 frames (one skipped: the star missed the slit).
+  - Measured the frames' noise from the HR 8634 pair.
+  - Built the α map.
+  - Compared the five LSF models on the HR 8634 pair.
+  - Refitted the prompt-5 epoch with `iod_depth` fixed per chunk to the
+    B-star map, against a free control.
+- Added a Q&A round before prompt 7. 56 tests pass.
+
+**Headline results.**
+- **The fork fix** passes its before/after test; any subset of orders is now
+  modelled against the right template chunks.
+- **The HIRES cell is α ≈ 3.33** (per frame 3.29–3.45), with a gentle red-ward
+  rise and no chunk-to-chunk structure beyond the errors.
+- **Pure-iodine fits** reach χ²_ν 1.0–5 against the measured (boxcar) noise,
+  but still misfit more where the iodine is stronger (+0.40).
+- **B-star LSF** 2.1 px. The LSF models are near-equivalent on pure iodine,
+  Hermite unstable.
+- **The payoff is negative.** Fixing α per chunk on the epoch: robust σ −7
+  [−26, +7] m/s (n.s.), χ² 22.6 → 23.4, iodine partial ρ +0.69 → +0.67.
+- **Iodine against PypeIt wavelengths** moves by half a km/s between B-star
+  frames through the night.
+
+**What this taught us about the repository and the data.**
+
+*The limiting error is the atlas's line pattern, and three tests now agree.*
+- Prompt 5: the misfit follows iodine structure, with the star held fixed.
+- Prompt 6: no LSF model changes that.
+- Here: no depth model does either, and pure iodine shows it too.
+
+What is left is that the Fischer atlas is a different cell (phase 2: 0.928
+line correlation). No parameter of this model can make up for that, which is
+why the new Q&A asks whether to build the cell's own spectrum before prompt 7
+or let prompt 7 measure what it costs.
+
+*The cell is thicker than phase 2 measured.* α ≈ 3.33 from ten B-star frames
+against 2.59 from two 60 s frames. The per-chunk `iod_depth` has absorbed the
+difference in every fit so far (it is free), which is why fixing it did not
+matter; the adapter's 2.59 stays as the starting point.
+
+*A bright star in a short slit needs `force_center_obj`, and then a boxcar.*
+Peak-finding fails on a slit-filling star, which is the same failure mode as
+Shane/Hamspec, and the parameter built for it works unchanged on
+`keck_hires_orig`. Then the optimal extraction's mask collapses on these
+stars, as it did on HD 187123 in poor seeing (phase 2), and the boxcar is the
+product to use. The boxcar does not mask the bad columns, so a bad-pixel mask
+has to. Without that the fit was ruined: χ²_ν ≈ 1800, falling to 44 with the
+mask.
+
+*Every noise scale belongs to one extraction.* Pair differences put the
+boxcar's inverse variance 1.61× too *small* and the optimal one's 2.35× too
+large. Any χ² comparison across extractions, B stars against HD 187123 for
+instance, has to be made in one set of units or not at all.
+
+*Workarounds should wait for the known fix.* I had started reducing the
+frames one by one to route around the extraction failure. The remedy already
+existed in PypeIt for exactly this case; it cost one parameter and gave all
+11 frames.
+
+*The wavelength zero point moves within a night.* The iodine-derived zero
+point against PypeIt's single-arc solution varies by ~0.5 km/s between B-star
+frames an hour apart. That is prompt 9's intra-night drift question, and one
+more reason the forward model's own wavelength solution is the point of
+phase 3.
+
+**Files added / modified.**
+- Fork: `vendor/pyodine/pyodine/chunks.py`, `models/spectrum.py`,
+  `plot_lib.py`; `vendor/README.md`.
+- Added:
+  - `first_hires_exoplanet/reduce_bstars.py` and `fit_bstars.py`;
+  - `first_hires_exoplanet/tests/test_fork_chunk_index.py` and
+    `test_adapter_boxcar.py`;
+  - `first_hires_exoplanet/data/bstar_chunks.csv` (2.0 MB),
+    `bstar_alpha_map.csv`, `bstar_lsf_models.csv` and
+    `bstar_alpha_payoff.csv`;
+  - `docs/figs/fig_p6b_bstars.png`.
+- Modified: `first_hires_exoplanet/utilities_hires/load_pyodine.py`
+  (`extraction`); this document (Report, Q&A).
+- Outside the repository: `redux/stage_`, `setup_` and
+  `reduce_19980826_lsf/`; `pyodine_runs/bstar_alpha_{free,fixed}_*`.
+
+**Whether any git command changed state.** No. Only read-only `git status`
+and `git log`.
+
+### 2026-09-30 (Prompt 7: all 31 cell-in epochs fitted; 55 m/s epoch to epoch, 19 m/s honest errors)
+
+**Task.** Fit all 31 cell-in epochs and produce a velocity table with honest
+uncertainties, reporting the per-chunk, per-order and epoch-to-epoch scatter
+separately, as phase 2 prompt 5 did. The Q&A before this prompt was answered
+(a): run it with the current model. Findings are in `## Report`, "Prompt 7".
+
+**What was done.**
+- Wrote `first_hires_exoplanet/fit_all_epochs.py`:
+  - an epoch list (phase 2's reduced frames with `IODIN = T`);
+  - per-epoch usable orders, matched to the template by echelle number;
+  - `pyodine`'s driver run in three shards;
+  - per-chunk tables mapped to template chunks;
+  - `pyodine`'s iSONG chunk combination;
+  - four error estimates, a within-night pair test, a magnitude check
+    against the catalogue orbit, and a cross-check against phase 2;
+  - the tables and `fig_p7_epochs.png`.
+- `fit_one_epoch.py`: `run_driver` passes `orders` through, and
+  `chunk_table` takes an explicit template index.
+- Added `tests/test_epoch_orders.py`.
+- Fitted every epoch. Two epochs were refitted after the traps below.
+  Ran the analysis, and all 59 tests.
+
+**Headline results.**
+- **Per chunk:** 290 m/s robust within an epoch, 230 m/s after the chunk
+  offsets are removed. The offsets spread 201 m/s and are common to every
+  epoch.
+- **Per order:** 55 m/s within an epoch. Over the time series, 31–42 m/s in
+  orders 64–70 and 97–198 m/s in orders 58–61.
+- **Epoch to epoch:** 55.3 m/s rms, planet included, against 733 m/s from
+  cross-correlation.
+- **Adopted error:** 19.1 m/s median. Close night pairs show no excess, and
+  the residual about the catalogue orbit is 26.2 m/s at χ²/dof 1.15. This is
+  a magnitude check only; prompt 8 is the assessment.
+- **Cross-check:** cross-correlation minus iodine tracks the ThAr-against-
+  iodine zero point at r = 0.982.
+
+**What this taught us about the repository and the data.**
+
+*The misfit was never the whole story; its variation is.* Prompts 4–6 fought
+a χ²_ν ≈ 22 misfit that no LSF, α or template sampling could remove. Most of
+it is a fixed pattern per chunk, the same in every epoch, and `pyodine`'s
+chunk-offset combination removes it. Judging per-chunk scatter on a single
+epoch overstated what the misfit costs. The median-to-weighted step (48.5 →
+26.2 m/s about the orbit) is the size of that overstatement.
+
+*`pyodine` assumes contiguous orders, a second time.* The driver maps
+template to observation orders with one constant shift. An extraction with a
+missing order (1998-09-13: 34 orders, no 71) is silently bridged, and fifty
+chunks are fitted against the wrong order with velocities of up to 7.7 × 10⁶
+m/s. It is the index trap one level up, and it goes in the prompt-10 report.
+
+*The analysis code can repeat a trap the fork has fixed.* `chunk_table`
+looked up the template by list position. It was harmless while every epoch
+had all 14 orders, and wrong from the first subset. Fixing a trap in the
+fork does not fix every copy of the assumption.
+
+*`pyodine`'s combination is fragile at the edges.*
+- `robust.mean` divides by zero on a one-epoch column.
+- The default weighting dictionary is mutated by its first implicit use.
+- The example-chunk plots index by fixed chunk numbers and raise
+  `IndexError` on a small epoch.
+
+All three are upstream items.
+
+*Waiting on a process by `pgrep -f` of its own command line matches the
+waiter.* A background wait loop never ended because its own shell contained
+the pattern. Check the actual worker processes.
+
+**Files added / modified.**
+- Added:
+  - `first_hires_exoplanet/fit_all_epochs.py`;
+  - `first_hires_exoplanet/tests/test_epoch_orders.py`;
+  - `first_hires_exoplanet/data/iodine_velocities.csv`,
+    `iodine_velocities_per_order.csv` and `iodine_chunks.csv` (2.3 MB);
+  - `docs/figs/fig_p7_epochs.png`.
+- Modified: `first_hires_exoplanet/fit_one_epoch.py`; this document
+  (Report, Logs).
+- Outside the repository: `../first-hires-exoplanet-data/pyodine_runs/epochs/`
+  (31 epoch directories, the full chunk table, logs).
+
+**Whether any git command changed state.** No. None was run.
+
+### 2026-09-30 (Prompt 8: the planet is recovered, K = 72.4 ± 7.1 m/s at 10σ, 26 m/s per epoch)
+
+**Task.** Assess prompt 7's velocities against the published 3.097-day
+Keplerian and the modern catalogue, exactly as phase 2 prompt 6 did, and
+state the precision, the significance and what the residuals contain, with
+figures from a script. No new Q&A answers since prompt 7. Findings are in
+`## Report`, "Prompt 8".
+
+**What was done.**
+- Wrote `first_hires_exoplanet/figs_phase3.py`. It imports `figs_phase2`
+  and reuses its catalogue loader, era cut, matching, `fit_circular`,
+  correlation test and style, so the two phases are compared by the same
+  code.
+- It adds a weighted fit, a phase-fixed amplitude, an F-test, a
+  Lomb–Scargle period search, leave-one-night-out, and residual
+  correlations with eight epoch quantities.
+- It writes five figures (`docs/figs/fig_ph3_*.png`) and
+  `data/iodine_keplerian_residuals.csv`.
+
+**Headline results.**
+- **Phase 2's method:** K = 72.4 ± 7.1 m/s (10.2σ), against 408 ± 188 in
+  phase 2.
+- **Weighted:** 78.0 ± 4.9 m/s.
+- **Against the catalogue:** r = +0.89, and the difference is 25.5 m/s at
+  χ²/dof 1.03.
+- **Period, not told:** 3.0954 d, FAP 2 × 10⁻¹¹.
+- **Residuals:** 25.8 m/s, χ²/dof 1.05, with no ThAr zero-point, misfit or
+  order-count dependence. There is a marginal seasonal correlation
+  (ρ = +0.40 with BVC, p = 0.03, one of eight tests).
+- **Precision:** 28× phase 2, 1.9× inside the 50 m/s goal, 22× short of the
+  catalogue.
+
+**What this taught us about the repository and the data.**
+
+*Prompt 7's errors are honest against an external standard.* Its adopted
+error was built from internal scatter and a four-pair night test. Against
+the catalogue's 1.2 m/s velocities it gives χ²/dof 1.03. So the error model
+needs no fudge factor, and the result can be quoted with its own error bars.
+
+*The goals' precision table predicted the outcome.* σ_K = σ√(2/N) gave
+6.6 m/s at 25.8 m/s per epoch, and the fit returned 7.1. The planning
+arithmetic in `## Goals` can be trusted for the "what would it take"
+questions of prompt 11.
+
+*Reusing phase 2's code is what makes the comparison valid.* Importing
+`figs_phase2` rather than copying it guarantees the same matching, era cut
+and K-error convention. A rewritten version would have had to be checked
+line by line against the old one. The one place the phases must differ, the
+error columns, is a two-line adapter (`load_ours`).
+
+*Two estimators of K differ by 1.3σ of their own error* (72.4 unweighted,
+78.0 weighted). Report the one that makes the phases comparable, and show
+the other.
+
+*Residuals against time, BVC and airmass are nearly one variable over a
+June–September season.* A correlation with any of them cannot say which one
+is the cause. Prompt 9 needs a test that separates them, for example the
+intra-night BVC change on the long nights.
+
+**Files added / modified.**
+- Added: `first_hires_exoplanet/figs_phase3.py`;
+  `first_hires_exoplanet/data/iodine_keplerian_residuals.csv`; `docs/figs/`
+  `fig_ph3_timeseries.png`, `fig_ph3_phasefold.png`, `fig_ph3_compare.png`,
+  `fig_ph3_precision.png` and `fig_ph3_residuals.png`.
+- Modified: this document (Report, Logs).
+
+**Whether any git command changed state.** No. Only read-only `git status`.
+
+### 2026-09-30 (Prompt 9: every named calibration defect fixed; what is left is weak red iodine and weak epochs)
+
+**Task.** Diagnose what is left:
+- the borrowed-arc nights;
+- the 08-25 and 08-26 drifts;
+- the December nights without a pixel flat;
+- 1998-09-13;
+- what the forward model fixed and what it did not.
+
+No new Q&A answers since prompt 8. Findings are in `## Report`, "Prompt 9".
+A new Q&A question is posed ("After prompt 9").
+
+**What was done.**
+- Wrote `first_hires_exoplanet/diagnose_phase3.py`. It covers:
+  - per-night arc quality, parsed from `run_pypeit.log` (the ThAr archive
+    cross-correlation) and `run_summary.json`;
+  - PypeIt's wavelength zero-point error per epoch and per order, as the
+    iodine fit measures it;
+  - within-night slopes of phase 2's residual, PypeIt's error and phase 3's
+    residual, with the 08-26 B stars;
+  - December and 09-13 against the full-format epochs;
+  - 09-13's slit and wavelength calibrations (`SlitTraceSet`, `WaveCalib`,
+    the slit bitmask);
+  - a telluric test with `pyodine`'s CARMENES mask;
+  - the seasonal term within and between nights;
+  - `pyodine`'s combination re-run on seven subsets.
+- It writes two tables and one figure.
+
+**Headline results.**
+- **Borrowed arcs:** 07-19 and 09-17 come back to +0.1 to +2.0σ from
+  +0.3 to +2.1 km/s.
+- **Drifts:** 08-25's −240 m/s/h becomes +1 ± 3 m/s/h.
+- **December:** 1997-12-23 is ordinary (−0.8σ; χ² +4%); 12-24 is cell-out.
+- **1998-09-13:** a bad arc (cc 0.65 against 0.91) cost three orders in
+  PypeIt. The iodine repairs its zero point (−0.8σ) but not its noise (2.8×).
+- **Phase 2's error:** residual against PypeIt's zero-point error is
+  ρ = +0.94 in phase 2, +0.07 in phase 3.
+- **What is left:** orders 58–61 (weak iodine), worth 25.8 → 17.2 m/s, and
+  the six ≤ 8-order epochs, worth 25.8 → 18.2 m/s. Together 11.5 m/s, with
+  K unchanged at 71.8 ± 3.5. Tellurics are worth 25.8 → 24.2. The seasonal
+  term is +0.75 ± 0.45 m/s per km/s, undetermined.
+
+**What this taught us about the repository and the data.**
+
+*The forward model is also a calibration diagnostic.* Its per-chunk
+wavelength fit measures PypeIt's zero-point error on the science photons:
+2.6 km/s on a borrowed-arc night, 256 m/s per hour of drift, and growth with
+time from the arc (ρ = 0.61). That is the most direct statement yet of what
+phase 2 could only infer.
+
+*1998-09-13's anomaly is the arc, not the flats or the tracing.* The
+PypeIt log has the evidence. Every order cross-correlates against the archive
+at cc 0.4–0.7 against ~0.9 elsewhere, and three orders were flagged
+`BADWVCALIB|BADTILTCALIB|BADFLATCALIB` and dropped from extraction. Phase 2
+carried it undiagnosed for four prompts; one grep of `cc =` in the log
+settles it.
+
+*Chunk weighting does not see order-level errors.* `pyodine`'s combination
+treats chunks as independent. Where a whole order shifts coherently, as in
+the red orders, it keeps weight it should not have. Order-level weighting is
+the natural next step (Q&A option (b)).
+
+*Tellurics are a real but small effect here.* No telluric mask was set,
+and the iodine band is mostly clear of lines. Where lines exist (order 60)
+the order is bad for other reasons too. Masking them buys 1.6 m/s.
+
+*Season and BVC are one variable for this data set.* A within-night test
+has 30× less lever. Do not chase the prompt-8 correlation with 31 epochs.
+
+*Selection after seeing the answer is still selection.* Both subsets
+chosen here have Keplerian-free criteria. But they were tried because of the
+residuals, so they are reported as variants, and the headline stays
+prompt 7's until the Q&A says otherwise.
+
+**Files added / modified.**
+- Added: `first_hires_exoplanet/diagnose_phase3.py`;
+  `first_hires_exoplanet/data/diagnose_nights.csv` and
+  `diagnose_variants.csv`; `docs/figs/fig_p9_diagnosis.png`.
+- Modified: this document (Report, Q&A, Logs).
+
+**Whether any git command changed state.** No. None was run.
+
+### 2026-09-30 (Prompt 10: upstream reports drafted for PypeIt and for `pyodine`; nothing sent)
+
+**Task.** Draft the upstream report to Ryan Cooke (phase 2's eleven items
+plus phase 3's), with `refframe_audit.py` and `verify_orig_fixes.py` as
+reproducers, and show it before anything is sent. The new Q&A answer ((a):
+prompt 7 stays the headline) bears on prompt 11, not this one. Findings are
+in `## Report`, "Prompt 10"; the sending decisions are in the Q&A.
+
+**What was done.**
+- Re-read phase 1's nine items and phase 2's two.
+- Checked each against the PypeIt checkout, read-only:
+  - `orig-hires-fixes` is on `origin` at `017bece06`, one commit on
+    `develop` `f3a1f1d27`, touching `keck_hires.py` only;
+  - no PR is open;
+  - the `wave.py` sign error is still in `develop` (line 128);
+  - upstream `develop` was checked through the GitHub API, not
+    `git fetch`.
+- Ran both reproducers. Fixed `refframe_audit.py`'s glob so it covers
+  exactly the 36 HD 187123 frames.
+- Verified the two new spec1d claims directly: zero wavelengths at masked
+  pixels, and biased boxcar flux under partially masked apertures.
+- Wrote `docs/upstream/pypeit_report_draft.md` and
+  `docs/upstream/pyodine_report_draft.md`.
+
+**Headline results.**
+- **To PypeIt:** 15 items. Four are new from phase 3: the ivar scale, zero
+  wavelengths at masked pixels, the unflagged boxcar bias, and silently
+  dropped orders.
+- **To `pyodine`:** 6 fork changes and 15 found-and-worked-around items.
+- Nothing sent.
+
+**What this taught us about the repository and the data.**
+
+*A reproducer rots when the data around it grows.* `refframe_audit.py`'s
+`reduce_1998*` glob was right when written. Since then it has silently
+taken in a B-star reduction of other stars, and it had always skipped
+December. Globs over a data directory other prompts write into need to name
+exactly what they mean.
+
+*An upstream item should be re-checked against upstream before it is
+sent.* The sign error's line number had moved (89 → 128). Its status ("still
+in `develop`") is what makes it worth sending, so it was checked, not
+assumed.
+
+*Claims about data files get verified on the files.* Two new PypeIt items
+(13, 14) came from memory of earlier prompts. Both were re-measured before
+drafting, and item 14 turned out to be sharper than remembered: the flux
+bias follows the fraction of the aperture summed, not only bad columns.
+
+*The findings split by audience.* Phase 3's `pyodine` findings would have
+been lost in a PypeIt report.
+
+**Files added / modified.**
+- Added: `docs/upstream/pypeit_report_draft.md` and
+  `docs/upstream/pyodine_report_draft.md`.
+- Modified:
+  - `first_hires_exoplanet/refframe_audit.py` (glob);
+  - `first_hires_exoplanet/data/refframe_audit.csv` (regenerated: 36 rows,
+    was 10);
+  - this document (Report, Q&A, Logs).
+
+**Whether any git command changed state.** No. Only read-only `git log`,
+`git branch -r --contains`, `git show`, `git diff` and `git status`, plus
+`gh api` GET requests against the public repository.
+
+### 2026-09-30 (Prompt 11: phase-3 assessment written; the public document tells what the three phases found)
+
+**Task.** Write the phase-3 assessment, and update `docs/public_HD187123b.md`
+with what the three phases actually found, including where we fell short of
+1998 and why. The new Q&A answers (after prompt 10): you send the reports;
+PypeIt as email plus issues and a PR; `pyodine` as GitHub issues. Nothing in
+them changes this prompt. Nothing was opened or sent from here. Findings are
+in `## Report`, "Prompt 11".
+
+**What was done.**
+- Wrote the assessment from the committed tables.
+- Added `fig_three_ways` and `fig_precision_ladder` to
+  `first_hires_exoplanet/figs.py`, which read `iodine_velocities.csv` and
+  `xcorr_velocities.csv`, and print the scatter numbers the document quotes.
+- Regenerated the figures. Restored `fig1`–`fig6` from `HEAD` with
+  `git show HEAD:… > file` (read-only git), since they re-render
+  byte-differently.
+- Replaced the public document's closing "we have not done it yet" paragraph
+  and added the two new sections, the `pyodine` reference, and data notes
+  for figures 7–8.
+
+**Headline results.** Phase 3 met its own criterion:
+- 25.8 m/s per epoch against a 50 m/s target;
+- 10.2σ, with the period found blind;
+- independent and open.
+
+It is 28× phase 2 and ~9–12× short of the 1998 and modern results. The
+public document says so in those numbers.
+
+**What this taught us about the repository and the data.**
+
+*The public document is the place hindsight is most tempting.* The 11.5 m/s
+variant would make a better headline. Both documents keep 26 m/s, as the
+Q&A decided, and say why.
+
+*Facts written for a general reader need the same checks as the Report.*
+Three statements in the first draft of the public section were wrong or
+unsupported, and were corrected before finishing:
+- the false-alarm odds (1 in 50 billion; the right figure is 1 in 40
+  billion);
+- the `pyodine` item count;
+- a reference title that was not in any project record.
+
+*`figs.py` is environment-sensitive in its bytes, not its content.*
+Regenerating it in either conda environment rewrites figures 1–6. Restore
+the committed ones, or accept the churn knowingly.
+
+*The prompt doc's own prediction about the LSF was wrong, and the record
+should say so.* The assessment does.
+
+**Files added / modified.**
+- Added: `docs/figs/fig7_three_ways.png` and `fig8_precision.png`.
+- Modified: `first_hires_exoplanet/figs.py`; `docs/public_HD187123b.md`;
+  this document (Report, Logs).
+
+**Whether any git command changed state.** No. `git show` (read-only) wrote
+the committed figures 1–6 back to the working tree, and `git status` was
+used for checking.

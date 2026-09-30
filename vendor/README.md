@@ -30,12 +30,30 @@ one-commit repository with no issues, no releases and no test suite, in which
 phase 2 found four things that are wrong for HIRES, two of them silently.  It
 is a reference implementation to adapt, not a dependency to trust.
 
-As of this commit the tree is **byte-identical to upstream**.  Verify that, or
-see the accumulated diff, with:
+When first vendored (phase 3 prompt 1) the tree was byte-identical to
+upstream.  It no longer is; the changes are listed below.  See the accumulated
+diff with:
 
 ```
 conda run -n pypeit14 python -m first_hires_exoplanet.vendor_pyodine --verify
 ```
+
+### Changes to the fork
+
+Each has a test under `first_hires_exoplanet/tests/` that fails without it.
+Details and measurements are in `claude_prompts/data_phase3_prompt.md`.
+
+| # | change | files | test | upstream? |
+|---|---|---|---|---|
+| 0 | NumPy 2: `np.float`, `np.NaN` removed | `lib/misc.py`, `fitters/lmfit_wrapper.py` | `test_fork_numpy2.py` | yes |
+| 1 | Beer-Lambert iodine depth (`scale_iodine_depth`) | `models/spectrum.py` | `test_fork_iodine_depth.py` | yes |
+| 2 | atlases record their wavelength frame (`IodineAtlas.wave_frame`) | `components.py` | `test_fork_atlas_frame.py` | the mechanism |
+| 3 | `bary_date` / `bary_vel_corr` units documented and guarded | `components.py` | `test_fork_bary_units.py` | yes |
+| 4 | `compute_weight(weight_type='ivar')`, `Spectrum.ivar` | `components.py` | `test_fork_weights.py` | yes |
+| 5 | chunks record their template index; the model and plots resolve the template through it (`template_chunk_index`), so a subset of orders is no longer modelled against the wrong template chunks | `chunks.py`, `models/spectrum.py`, `plot_lib.py` | `test_fork_chunk_index.py` | yes |
+
+Changes 0-4: phase 3 prompt 2.  Change 5: phase 3, after prompt 6 (Q&A
+decision).
 
 ### What was and was not copied
 

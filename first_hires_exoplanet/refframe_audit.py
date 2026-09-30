@@ -103,7 +103,7 @@ def collect_epochs(redux_dir):
     Returns:
         `astropy.table.Table`_: one row per epoch.
     """
-    files = sorted(glob.glob(os.path.join(redux_dir, 'reduce_1998*', 'Science',
+    files = sorted(glob.glob(os.path.join(redux_dir, 'reduce_19[0-9][0-9][0-9][0-9][0-9][0-9]', 'Science',
                                           'spec1d_*.fits')))
     if len(files) == 0:
         raise FileNotFoundError(f'No spec1d files under {redux_dir}')
@@ -217,7 +217,7 @@ def check_invertibility(redux_dir, tbl):
     Returns:
         tuple: (max round-trip error in m/s, the order checked)
     """
-    ifile = glob.glob(os.path.join(redux_dir, 'reduce_1998*', 'Science',
+    ifile = glob.glob(os.path.join(redux_dir, 'reduce_19[0-9][0-9][0-9][0-9][0-9][0-9]', 'Science',
                                    'spec1d_' + tbl['koaid'][0] + '*.fits'))[0]
     worst = 0.
     with fits.open(ifile) as hdul:
