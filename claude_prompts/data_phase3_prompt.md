@@ -261,6 +261,12 @@ exact `pyodine` commit anything is derived from.
     including, plainly, where we fell short of the 1998 result and why.
     Use Opus 5. Log your work.
 
+12. Generate a technical slide deck in PowerPoint describing what you have accomplished in phases 1-3.  Place it in `docs/slides/technical_summary.pptx`.  I will then upload to a GoogleDrive.  Include figures (generate those from Python scripts, either existing or new ones).
+    Use Opus 5. Log your work.
+
+13. This is very nice.  Can you modify the text to have a font size no smaller than 20pt?  
+    Use Opus 5. Log your work.
+
 ## Q&A
 
 ### After prompt 3: decisions before prompt 4
@@ -3798,3 +3804,64 @@ should say so.* The assessment does.
 **Whether any git command changed state.** No. `git show` (read-only) wrote
 the committed figures 1–6 back to the working tree, and `git status` was
 used for checking.
+
+### 2026-09-30 (Prompt 12: technical slide deck for phases 1–3, 28 slides, built by a script)
+
+**Task.** Generate a technical PowerPoint deck on what phases 1–3
+accomplished, at `docs/slides/technical_summary.pptx`, with figures from
+Python scripts, for upload to Google Drive. No new Q&A answers since
+prompt 11.
+
+**What was done.**
+- Installed `python-pptx` 1.0.2 into `pypeit14` with pip; it was in neither
+  environment. It brought `XlsxWriter` and `lxml`.
+- Wrote `first_hires_exoplanet/make_slides.py`. It:
+  - takes the headline numbers from the committed tables
+    (`iodine_velocities.csv`, `iodine_keplerian_residuals.csv`,
+    `diagnose_variants.csv`, `xcorr_velocities.csv`) and recomputes K with
+    `figs_phase2.fit_circular`;
+  - draws one new schematic, `docs/figs/fig_slides_pipeline.png`;
+  - assembles a 16:9 deck from the figures the phase scripts already
+    generate; the docstring maps each figure to its script.
+- Rendered the deck through LibreOffice to PDF and PNG (scratch only) to
+  check the layout.
+
+**The deck (28 slides).**
+- **Opening:** title; the bottom line; the three-phase schematic.
+- **Phase 1 (4):** the source fixes and parameters as a table;
+  wavelength-solution quality; order tracing and the flat.
+- **Phase 2 (5):** what was built; the atlas; the non-detection; the
+  47-against-702 m/s diagnosis.
+- **Phase 3 (13):** the fork's six changes; deconvolution; one epoch; LSF
+  models; B stars; all epochs; the detection; the catalogue comparison; the
+  residuals and the blind period search; the calibration defects fixed; the
+  prompt-9 variants (with the Q&A's "reported, not claimed"); the precision
+  ladder.
+- **Summary (3):** why 26 m/s and not 3; the upstream reports and next steps;
+  reproducibility (commits and scripts).
+- Every content slide carries a one-line takeaway.
+
+**What this taught us about the repository and the data.**
+
+*Every figure the deck needed already existed and came from a script.* The
+discipline of "calculations become scripts" paid off here: the deck is a
+layout job over committed products, plus one schematic. It re-runs in
+seconds if a number changes.
+
+*Headline numbers in a deck should be computed, not typed.* K, its error, the
+residual and the variant rows are read from the tables at build time. Only
+numbers that live in a Report and nowhere in a table are typed: phase 1's
+fixes, phase 2's diagnostics, the per-prompt findings.
+
+*Check the layout by rendering, not by reading the code.* LibreOffice's
+headless conversion plus a contact sheet showed every slide at once. It
+caught one syntax error before that, and nothing in the layout needed
+changing.
+
+**Files added / modified.**
+- Added: `first_hires_exoplanet/make_slides.py`;
+  `docs/slides/technical_summary.pptx`;
+  `docs/figs/fig_slides_pipeline.png`.
+- Modified: this document (Logs). `pypeit14` gained `python-pptx`.
+
+**Whether any git command changed state.** No. None was run.
