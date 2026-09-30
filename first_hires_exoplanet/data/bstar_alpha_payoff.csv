@@ -1,0 +1,3 @@
+config,n_good,v_robust,order_scatter,within_order,redchi_meas,v_median,v_expected,epoch_error,partial_iod,partial_tem,no_unc,runtime
+iod_depth free,564,287.574,50.422,257.489,22.6019,-665.037,-689.13,12.1091,0.688819,0.113678,59,34.2144
+iod_depth fixed (B stars),560,276.274,77.0767,250.138,23.4412,-661.07,-689.13,11.6747,0.669562,0.0900463,59,31.5755
