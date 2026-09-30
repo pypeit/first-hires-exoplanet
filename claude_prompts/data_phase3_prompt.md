@@ -267,6 +267,8 @@ exact `pyodine` commit anything is derived from.
 13. This is very nice.  Can you modify the text to have a font size no smaller than 20pt?  
     Use Opus 5. Log your work.
 
+14. Can you add a slide to the deck that shows the results from the original 1998 paper?  Include the figure from the original paper that shows the velocity curve.  Use Opus 5. Log your work.
+
 ## Q&A
 
 ### After prompt 3: decisions before prompt 4
@@ -3863,5 +3865,81 @@ changing.
   `docs/slides/technical_summary.pptx`;
   `docs/figs/fig_slides_pipeline.png`.
 - Modified: this document (Logs). `pypeit14` gained `python-pptx`.
+
+**Whether any git command changed state.** No. None was run.
+
+### 2026-09-30 (Prompt 14: the 1998 paper's result and velocity figures added to the deck as slide 2)
+
+**Task.** Add a slide showing the results of the original 1998 paper, with
+its velocity-curve figure. No new Q&A answers.
+
+**What was done.**
+- Obtained the publisher's PDF of Butler, Marcy, Vogt & Apps 1998, PASP,
+  110, 1389 (DOI 10.1086/316287). It is 5 pages; the paper had not been read
+  end to end before (see `context_prompts.md`, 2026-09-19).
+- Wrote `first_hires_exoplanet/fetch_butler1998.py`. It downloads the PDF to
+  `../first-hires-exoplanet-data/literature/` unless it is already there. It
+  then extracts the two page-2 images with poppler's `pdfimages`, as
+  `butler1998_fig1_july.png` and `butler1998_fig2_phased.png`.
+- Added `Deck.two_figures` and a new slide 2 to `make_slides.py`. The
+  slide shows both figures, the paper's Table 1 (P, K, e) and M sin i, the
+  data description, and a takeaway that sets our K and rms, computed from
+  the tables, against the target. If the figures are missing,
+  `make_slides.py` calls the fetch script.
+- Rebuilt the deck (31 slides) and rendered it through LibreOffice to check
+  the layout. Every text run is still ≥ 20 pt (prompt 13).
+
+**Headline results.** The paper gives two velocity figures, and the slide
+uses both:
+- **Fig. 1:** the 10 velocities from the 1998 July 15–19 run, against time.
+- **Fig. 2:** all 20 velocities, phased.
+
+Its Table 1 gives P = 3.097 ± 0.003 d, K = 72.0 ± 2.0 m/s, e = 0.03 ± 0.03
+and T₀ = JD 2,451,010.982 ± 0.01. The text gives more:
+- the Keplerian fit has K = 73.0 m/s and rms 7.50 m/s;
+- the sinusoid has K = 71.6 m/s and rms 7.62 m/s;
+- internal errors are ~6 m/s: ~3 m/s from photons and ~4 m/s systematic;
+- R = 87,000, over 3900–6200 Å.
+
+**What this taught us about the repository and the data.**
+
+*The paper answers questions phase 0 left open.*
+- The discovery set is **20 velocities**, from 1997 Dec 23 to 1998 Aug.
+  Our 31 cell-in epochs run to 1998 December, so they are not the same set.
+- The first two velocities (1997 Dec 23 and 1998 Jun 18) differed by
+  84 m/s. That difference is what triggered the five-night July run.
+- The paper prints no velocity table, only the figures. So a direct
+  epoch-by-epoch comparison with the 1998 numbers is still not possible
+  (phase 0, Q13).
+
+*IOPscience's bot protection is intermittent, not absolute.*
+- One `curl` through the ADS `PUB_PDF` link gateway returned the PDF.
+- Minutes later, the same URL and the direct IOP URL both redirected to the
+  Radware validation page, from `curl`-like and from Python requests alike.
+- `fetch_butler1998.py` therefore falls back to a PDF saved by hand at a
+  fixed path. It does not try to get around the check.
+
+*The figures are embedded as 300-dpi 1-bit images with their axes.* So they
+can be extracted losslessly, and no page cropping is needed.
+
+*`conda run` does not pass stdin through.* A `python - <<EOF` heredoc under
+`conda run -n pypeit14` silently does nothing. Write the script to a file.
+
+*The figures are the ASP's copyright.* They are kept outside the repository
+with the PDF, and they are not committed. The `.pptx` embeds them. That is
+fine for a technical talk with the citation on the slide, but it matters if
+the deck is posted publicly.
+
+*Prompt 13 has no log entry here.* Its change is in the code
+(`MIN_PT = 20` and `_pt`), and the deck already had 30 slides before this
+prompt, not prompt 12's 28. The prompt-13 session evidently did not log.
+
+**Files added / modified.**
+- Added: `first_hires_exoplanet/fetch_butler1998.py`.
+- Modified: `first_hires_exoplanet/make_slides.py`;
+  `docs/slides/technical_summary.pptx`; `docs/figs/fig_slides_pipeline.png`
+  (regenerated, unchanged in content); this document (Logs).
+- Outside the repository: `../first-hires-exoplanet-data/literature/`
+  (the PDF and the two figure PNGs).
 
 **Whether any git command changed state.** No. None was run.

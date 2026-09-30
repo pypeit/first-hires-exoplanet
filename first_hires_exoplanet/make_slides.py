@@ -21,6 +21,8 @@ Which script makes which figure:
     diagnose_phase3.py      fig_p9_diagnosis
     figs.py                 fig7_three_ways, fig8_precision
     make_slides.py          fig_slides_pipeline
+    fetch_butler1998.py     Butler et al. 1998 Figs. 1-2 (not committed:
+                            ../first-hires-exoplanet-data/literature/)
 
 Run with:
 
@@ -45,6 +47,8 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+
+from first_hires_exoplanet import fetch_butler1998 as fb98
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +242,22 @@ class Deck:
             self._takeaway(s, takeaway)
         return s
 
+    def two_figures(self, title, paths, captions, lines, takeaway=None):
+        """ Two figures side by side, a caption under each, then full-width lines. """
+        s = self.prs.slides.add_slide(self.blank)
+        self._chrome(s, title)
+        top, fh, fw, gap = Inches(1.2), Inches(3.55), Inches(6.1), Inches(0.33)
+        for i, (path, cap) in enumerate(zip(paths, captions)):
+            x = Inches(0.4) + i * (fw + gap)
+            self._image(s, path, x, top, fw, fh)
+            self._text(s, x, top + fh, fw, Inches(0.45), [(cap, dict(color=INK2))],
+                       align=PP_ALIGN.CENTER)
+        self._text(s, Inches(0.55), top + fh + Inches(0.5), Inches(12.2), Inches(1.0),
+                   lines, size=MIN_PT)
+        if takeaway:
+            self._takeaway(s, takeaway)
+        return s
+
     def table(self, title, header, rows, takeaway=None, widths=None, row_h=0.62):
         s = self.prs.slides.add_slide(self.blank)
         self._chrome(s, title)
@@ -303,12 +323,24 @@ def B(text, level=0, **kw):
 
 def build(out):
     N = numbers()
+    if not all(os.path.isfile(f) for f in fb98.fig_paths()):
+        fb98.extract(fb98.download())
     fig_pipeline(os.path.join(FIGS, 'fig_slides_pipeline.png'))
     d = Deck()
 
     d.title('Re-detecting HD 187123 b from the 1998 Keck/HIRES frames',
             'A modern, open reduction of the first planet Keck found: PypeIt + an iodine forward model',
             'J. Xavier Prochaska and Claude  ·  phases 1–3  ·  30 September 2026')
+
+    # Prompt 14: the published result, with the paper's own figures
+    d.two_figures('The 1998 discovery: Butler et al., PASP 110, 1389', fb98.fig_paths(),
+                  ['Fig. 1: the 1998 July 15–19 run', 'Fig. 2: all 20 velocities, phased'], [
+        ('P = 3.097 ± 0.003 d   ·   K = 72.0 ± 2.0 m/s   ·   e = 0.03 ± 0.03   ·   '
+         'M sin i = 0.52 Jupiter masses', dict(bold=True, space=4)),
+        ('Table 1. 20 velocities, 1997 Dec – 1998 Aug; errors ~6 m/s; rms 7.5 m/s about the orbit',
+         dict(color=INK2)),
+    ], takeaway='Our target. This work: K = {:.1f} ± {:.1f} m/s at {:.1f} m/s rms, '
+                'from {:d} cell-in epochs.'.format(N['K'], N['sK'], N['resid'], N['n_epochs']))
 
     d.bullets('The bottom line', [
         B('Planet recovered: K = {:.1f} ± {:.1f} m/s ({:.1f}σ); published 72, modern catalogue 69.2'.format(
@@ -453,7 +485,7 @@ def build(out):
 
 
 def main():
-    p = argparse.ArgumentParser(description='Build the technical slide deck (phase 3, prompts 12-13)')
+    p = argparse.ArgumentParser(description='Build the technical slide deck (phase 3, prompts 12-14)')
     p.add_argument('--out', type=str, default=OUT)
     build(p.parse_args().out)
 
