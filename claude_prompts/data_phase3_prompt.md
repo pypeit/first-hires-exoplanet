@@ -264,6 +264,9 @@ exact `pyodine` commit anything is derived from.
 12. Generate a technical slide deck in PowerPoint describing what you have accomplished in phases 1-3.  Place it in `docs/slides/technical_summary.pptx`.  I will then upload to a GoogleDrive.  Include figures (generate those from Python scripts, either existing or new ones).
     Use Opus 5. Log your work.
 
+13. This is very nice.  Can you modify the text to have a font size no smaller than 20pt?  
+    Use Opus 5. Log your work.
+
 ## Q&A
 
 ### After prompt 3: decisions before prompt 4
