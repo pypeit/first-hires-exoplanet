@@ -138,6 +138,15 @@ def fig_pipeline(outfile):
 # Slide helpers
 # ---------------------------------------------------------------------------
 
+#: Prompt 13: no text on any slide is smaller than this
+MIN_PT = 20
+
+
+def _pt(size):
+    """ Every font size goes through here, so none falls below MIN_PT. """
+    return Pt(max(int(size), MIN_PT))
+
+
 class Deck:
 
     def __init__(self):
@@ -146,44 +155,37 @@ class Deck:
         self.blank = self.prs.slide_layouts[6]
         self.n = 0
 
-    def _text(self, slide, x, y, w, h, paras, size=18, color=INK, bold=False, align=None):
+    def _text(self, slide, x, y, w, h, paras, size=MIN_PT, color=INK, bold=False, align=None):
         box = slide.shapes.add_textbox(x, y, w, h)
         tf = box.text_frame
         tf.word_wrap = True
         for i, p in enumerate(paras):
             para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-            if isinstance(p, tuple):
-                txt, kw = p
-            else:
-                txt, kw = p, {}
+            txt, kw = p if isinstance(p, tuple) else (p, {})
             level = kw.get('level', 0)
             bullet = kw.get('bullet', False)
             run = para.add_run()
             run.text = ('• ' if bullet and level == 0 else '– ' if bullet else '') + txt
-            run.font.size = Pt(kw.get('size', size - 2 * level))
+            run.font.size = _pt(kw.get('size', size))
             run.font.bold = kw.get('bold', bold)
             run.font.color.rgb = rgb(kw.get('color', color))
             para.level = level
-            para.space_after = Pt(kw.get('space', 6))
+            para.space_after = Pt(kw.get('space', 8))
             if align:
                 para.alignment = align
         return box
 
-    def _chrome(self, slide, title, section=None):
+    def _chrome(self, slide, title):
+        """ Title bar and slide number (the 10-pt running footer is gone: prompt 13). """
         self.n += 1
         bar = slide.shapes.add_shape(1, 0, 0, W, Inches(0.09))
         bar.fill.solid()
         bar.fill.fore_color.rgb = rgb(BLUE)
         bar.line.fill.background()
-        self._text(slide, Inches(0.55), Inches(0.28), Inches(12.2), Inches(0.9),
-                   [(title, dict(size=28, bold=True))])
-        foot = 'HD 187123 b from the 1998 HIRES frames — technical summary'
-        if section:
-            foot = section + '   ·   ' + foot
-        self._text(slide, Inches(0.55), Inches(7.02), Inches(10.5), Inches(0.35),
-                   [(foot, dict(size=10, color=INK2))])
-        self._text(slide, Inches(12.0), Inches(7.02), Inches(0.8), Inches(0.35),
-                   [(str(self.n), dict(size=10, color=INK2))], align=PP_ALIGN.RIGHT)
+        self._text(slide, Inches(0.55), Inches(0.25), Inches(11.6), Inches(0.9),
+                   [(title, dict(size=30, bold=True))])
+        self._text(slide, Inches(12.0), Inches(0.3), Inches(0.9), Inches(0.5),
+                   [(str(self.n), dict(color=INK2))], align=PP_ALIGN.RIGHT)
 
     def _image(self, slide, path, x, y, w, h):
         """ Fit an image inside a box, preserving its aspect ratio, centred. """
@@ -200,105 +202,93 @@ class Deck:
         bar.fill.solid()
         bar.fill.fore_color.rgb = rgb(BLUE)
         bar.line.fill.background()
-        self._text(s, Inches(0.8), Inches(2.2), Inches(11.7), Inches(1.6),
+        self._text(s, Inches(0.8), Inches(2.0), Inches(11.7), Inches(1.6),
                    [(title, dict(size=40, bold=True))])
-        self._text(s, Inches(0.8), Inches(3.75), Inches(11.7), Inches(1.2),
-                   [(subtitle, dict(size=22, color=INK2))])
-        self._text(s, Inches(0.8), Inches(5.6), Inches(11.7), Inches(0.8),
-                   [(byline, dict(size=16, color=INK2))])
+        self._text(s, Inches(0.8), Inches(3.7), Inches(11.7), Inches(1.2),
+                   [(subtitle, dict(size=24, color=INK2))])
+        self._text(s, Inches(0.8), Inches(5.5), Inches(11.7), Inches(0.8),
+                   [(byline, dict(color=INK2))])
 
     def section(self, label, title, lead, color=BLUE):
         s = self.prs.slides.add_slide(self.blank)
         self.n += 1
-        self._text(s, Inches(0.8), Inches(2.4), Inches(11.7), Inches(0.6),
-                   [(label, dict(size=18, bold=True, color=color))])
-        self._text(s, Inches(0.8), Inches(3.0), Inches(11.7), Inches(1.2),
-                   [(title, dict(size=36, bold=True))])
-        self._text(s, Inches(0.8), Inches(4.2), Inches(11.5), Inches(1.6),
-                   [(lead, dict(size=20, color=INK2))])
+        self._text(s, Inches(0.8), Inches(2.3), Inches(11.7), Inches(0.6),
+                   [(label, dict(size=22, bold=True, color=color))])
+        self._text(s, Inches(0.8), Inches(2.9), Inches(11.7), Inches(1.2),
+                   [(title, dict(size=38, bold=True))])
+        self._text(s, Inches(0.8), Inches(4.2), Inches(11.5), Inches(2.0),
+                   [(lead, dict(size=22, color=INK2))])
 
-    def bullets(self, title, items, section=None, takeaway=None):
+    def bullets(self, title, items, takeaway=None, size=22):
         s = self.prs.slides.add_slide(self.blank)
-        self._chrome(s, title, section)
-        self._text(s, Inches(0.7), Inches(1.35), Inches(12.0), Inches(5.0), items, size=20)
+        self._chrome(s, title)
+        bottom = TAKE_TOP if takeaway else Inches(7.2)
+        self._text(s, Inches(0.7), Inches(1.3), Inches(12.0), bottom - Inches(1.4), items, size=size)
         if takeaway:
             self._takeaway(s, takeaway)
         return s
 
-    def figure(self, title, fig, section=None, takeaway=None, notes=None):
+    def figure(self, title, fig, takeaway=None):
         s = self.prs.slides.add_slide(self.blank)
-        self._chrome(s, title, section)
-        top, bottom = Inches(1.25), Inches(6.2 if takeaway else 6.85)
-        self._image(s, os.path.join(FIGS, fig), Inches(0.5), top, Inches(12.33), bottom - top)
-        if takeaway:
-            self._takeaway(s, takeaway)
-        if notes:
-            s.notes_slide.notes_text_frame.text = notes
-        return s
-
-    def split(self, title, fig, items, section=None, takeaway=None, fig_frac=0.6):
-        s = self.prs.slides.add_slide(self.blank)
-        self._chrome(s, title, section)
-        fw = Inches(12.33 * fig_frac)
-        bottom = Inches(6.2 if takeaway else 6.85)
-        self._image(s, os.path.join(FIGS, fig), Inches(0.5), Inches(1.3), fw, bottom - Inches(1.3))
-        self._text(s, Inches(0.5) + fw + Inches(0.3), Inches(1.4), Inches(12.33) - fw - Inches(0.3),
-                   bottom - Inches(1.4), items, size=17)
+        self._chrome(s, title)
+        top = Inches(1.2)
+        bottom = TAKE_TOP - Inches(0.1) if takeaway else Inches(7.3)
+        self._image(s, os.path.join(FIGS, fig), Inches(0.4), top, Inches(12.53), bottom - top)
         if takeaway:
             self._takeaway(s, takeaway)
         return s
 
-    def table(self, title, header, rows, section=None, takeaway=None, widths=None, size=15):
+    def table(self, title, header, rows, takeaway=None, widths=None, row_h=0.62):
         s = self.prs.slides.add_slide(self.blank)
-        self._chrome(s, title, section)
+        self._chrome(s, title)
         nr, nc = len(rows) + 1, len(header)
-        top = Inches(1.4)
-        height = Inches(0.46) * nr
-        shp = s.shapes.add_table(nr, nc, Inches(0.6), top, Inches(12.1), height)
+        shp = s.shapes.add_table(nr, nc, Inches(0.5), Inches(1.35), Inches(12.33), Inches(row_h) * nr)
         tbl = shp.table
         if widths:
             for j, wv in enumerate(widths):
                 tbl.columns[j].width = Inches(wv)
+        for i in range(nr):
+            tbl.rows[i].height = Inches(row_h)
         for j, h in enumerate(header):
-            c = tbl.cell(0, j)
-            c.text = h
-            c.fill.solid()
-            c.fill.fore_color.rgb = rgb(BLUE)
-            for p in c.text_frame.paragraphs:
-                for r in p.runs:
-                    r.font.size, r.font.bold = Pt(size), True
-                    r.font.color.rgb = rgb('ffffff')
+            self._cell(tbl.cell(0, j), h, BLUE, 'ffffff', True)
         for i, row in enumerate(rows, start=1):
             for j, val in enumerate(row):
-                c = tbl.cell(i, j)
-                c.text = str(val)
-                c.fill.solid()
-                c.fill.fore_color.rgb = rgb('f3f3f1' if i % 2 else 'ffffff')
-                for p in c.text_frame.paragraphs:
-                    for r in p.runs:
-                        r.font.size = Pt(size)
-                        r.font.color.rgb = rgb(INK)
+                self._cell(tbl.cell(i, j), str(val), 'f3f3f1' if i % 2 else 'ffffff', INK, False)
         if takeaway:
             self._takeaway(s, takeaway)
         return s
 
+    @staticmethod
+    def _cell(c, text, fill, color, bold):
+        c.text = text
+        c.fill.solid()
+        c.fill.fore_color.rgb = rgb(fill)
+        c.margin_top = c.margin_bottom = Inches(0.04)
+        for p in c.text_frame.paragraphs:
+            for r in p.runs:
+                r.font.size, r.font.bold = _pt(MIN_PT), bold
+                r.font.color.rgb = rgb(color)
+
     def _takeaway(self, slide, text):
-        box = slide.shapes.add_shape(1, Inches(0.5), Inches(6.3), Inches(12.33), Inches(0.62))
+        box = slide.shapes.add_shape(1, Inches(0.4), TAKE_TOP, Inches(12.53), Inches(7.35) - TAKE_TOP)
         box.fill.solid()
         box.fill.fore_color.rgb = rgb('eef4fc')
         box.line.fill.background()
         tf = box.text_frame
         tf.word_wrap = True
-        p = tf.paragraphs[0]
-        r = p.add_run()
+        r = tf.paragraphs[0].add_run()
         r.text = text
-        r.font.size, r.font.bold = Pt(16), True
+        r.font.size, r.font.bold = _pt(MIN_PT), True
         r.font.color.rgb = rgb(INK)
 
     def save(self, path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         self.prs.save(path)
         print('  wrote {:s} ({:d} slides)'.format(path, self.n))
+
+
+#: Top of the takeaway bar: room for two lines at 20 pt
+TAKE_TOP = Inches(6.35)
 
 
 def B(text, level=0, **kw):
@@ -315,23 +305,21 @@ def build(out):
     N = numbers()
     fig_pipeline(os.path.join(FIGS, 'fig_slides_pipeline.png'))
     d = Deck()
-    P1, P2, P3 = 'Phase 1', 'Phase 2', 'Phase 3'
 
     d.title('Re-detecting HD 187123 b from the 1998 Keck/HIRES frames',
             'A modern, open reduction of the first planet Keck found: PypeIt + an iodine forward model',
-            'J. Xavier Prochaska and Claude  ·  technical summary of phases 1–3  ·  30 September 2026')
+            'J. Xavier Prochaska and Claude  ·  phases 1–3  ·  30 September 2026')
 
     d.bullets('The bottom line', [
-        B('Planet recovered: K = {:.1f} ± {:.1f} m/s, {:.1f}σ, against 72 m/s published (Butler et al. 1998) '
-          'and 69.2 m/s in the modern catalogue'.format(N['K'], N['sK'], N['nsig'])),
-        B('Period found blind: 3.0954 d (true 3.0966 d); false-alarm probability 2 × 10⁻¹¹'),
-        B('Per-epoch precision {:.1f} m/s about the orbit, over {:d} cell-in epochs on {:d} nights'.format(
+        B('Planet recovered: K = {:.1f} ± {:.1f} m/s ({:.1f}σ); published 72, modern catalogue 69.2'.format(
+            N['K'], N['sK'], N['nsig'])),
+        B('Period found blind: 3.0954 d (true 3.0966 d), false-alarm probability 2 × 10⁻¹¹'),
+        B('{:.1f} m/s per epoch about the orbit; {:d} cell-in epochs, {:d} nights'.format(
             N['resid'], N['n_epochs'], N['n_nights'])),
-        B('28× better than lamp-calibrated velocities (phase 2); ~9× short of Butler’s 3 m/s; '
-          '~12× short of the modern pipeline on the same photons (2.2 m/s)'),
-        B('All open: PypeIt (keck_hires_orig, fixed) + a tested fork of pyodine; '
-          'no code, velocities or calibration from the discovery pipeline'),
-    ], takeaway='Success criterion (50 m/s per epoch, a convincing independent detection): met.')
+        B('28× better than lamp-calibrated velocities; ~9× short of Butler’s 3 m/s; '
+          '~12× short of the modern pipeline (2.2 m/s)'),
+        B('All open: PypeIt + a tested pyodine fork; nothing from the discovery pipeline'),
+    ], takeaway='Success criterion (50 m/s per epoch, an independent detection): met.')
 
     d.figure('Three phases, one chain', 'fig_slides_pipeline.png',
              takeaway='Phase 2 measured why lamps fail; phase 3 replaced the lamp with the iodine cell.')
@@ -340,130 +328,132 @@ def build(out):
     d.section('Phase 1', 'PypeIt on the pre-2004 HIRES CCD',
               'Can a modern open pipeline reduce the original Tektronix-detector frames at all?',
               color=AQUA)
-    d.table('Six source fixes, three parameters, one calibration decision', ['item', 'what', 'effect'], [
-        ['get_rawimage', 'prepix × 2 → prepix × namp', 'single-amp frames read 21 columns off'],
-        ['bad-pixel mask', 'MAKEE column C → C − PREPIX', 'mask landed ~20 px from the defects'],
-        ['binning', "'1,2' read as '2,1'", 'platescale 0.216 instead of 0.432″/px'],
-        ['check_spectrograph', 'PypeItError built, never raised', 'wrong spectrograph accepted silently'],
-        ['exprng', '[601, None] → [1, None] (Orig only)', 'bright-star science frames were excluded'],
-        ['find_trim_edge / sky', '1,1; skip_skysub; no_local_sky', 'a V = 7.9 star fills the 3.5″ slit'],
-        ['flats', 'borrow 1998-07-14 (then 08-12) B1 flats', 'only clean hatch-closed B1 flats in the run'],
-    ], section=P1, widths=[2.4, 4.9, 4.8],
-        takeaway='Fixes on PypeIt branch orig-hires-fixes (017bece06); verify_orig_fixes.py reproduces them.')
-    d.figure('37 orders traced; every order wavelength-solved below 0.2 px', 'fig_p1_wavecal.png',
-             section=P1, takeaway='July 1998: 10 of 10 frames, 37 orders each, wavecal RMS medians 0.115–0.127 px.')
-    d.figure('The traced orders and the flat', 'fig_p1_orders.png', section=P1,
-             takeaway='The inherited find_trim_edge = 3,3 would mask 6 of ~10 spatial pixels per order.')
+    d.table('Phase 1: what PypeIt needed', ['item', 'fix', 'symptom'], [
+        ['get_rawimage', 'prepix × namp', 'image 21 columns off'],
+        ['bad-pixel mask', 'column C − PREPIX', 'mask 20 px off'],
+        ['binning', "'1,2' not '2,1'", 'platescale halved'],
+        ['check_spectrograph', 'raise the error', 'silently accepted'],
+        ['exprng', '[1, None] for Orig', 'science excluded'],
+        ['find_trim_edge, sky', '1,1; no sky fit', 'star fills the slit'],
+        ['flats', 'borrow clean B1 flats', 'none on most nights'],
+    ], widths=[3.3, 4.6, 4.43], row_h=0.56,
+        takeaway='Fixes on branch orig-hires-fixes (017bece06); verify_orig_fixes.py reproduces them.')
+    d.figure('37 orders, every one solved below 0.2 px', 'fig_p1_wavecal.png',
+             takeaway='July 1998: 10 of 10 frames, 37 orders each; wavecal RMS medians 0.115–0.127 px.')
+    d.figure('The traced orders and the flat', 'fig_p1_orders.png',
+             takeaway='The inherited find_trim_edge = 3,3 would mask 6 of ~10 pixels per order.')
 
     # ---- Phase 2 ----------------------------------------------------------
     d.section('Phase 2', 'Twenty nights, and velocities from a lamp',
-              'Extend the reduction to the whole discovery era; measure relative velocities by '
-              'cross-correlation; build the inputs phase 3 needs.', color='8a8a86')
+              'The whole discovery era reduced; velocities by cross-correlation; '
+              'the inputs phase 3 needs.', color='8a8a86')
     d.bullets('What phase 2 built', [
-        B('20 nights, 36 science frames, 37 orders each (09-13: 34); nightly wavecal RMS 0.108–0.146 px'),
-        B('Quality filter: 1329 order-spectra, 11.3% rejected (data/order_quality.csv)'),
-        B('Template: three 1998-08-26 cell-out exposures co-added (S/N ~790 per pixel against the true noise)'),
-        B('Iodine atlas: Fischer May 2022 FTS; line positions match the HIRES cell (r = 0.928), '
-          'depths do not: α = 2.59 Beer–Lambert'),
-        B('Adapter utilities_hires/: observed frame, VEL_CORR divided out, JD(UTC) mid-exposure, BVC in m/s'),
-        B('refframe_audit.py: PypeIt’s heliocentric correction has a solar-term sign error '
-          '(+9 to +14 m/s, drifting 5.2 m/s) and omits relativistic terms (−4.6 m/s)'),
-    ], section=P2, takeaway='Two core/wave.py bugs affect every PypeIt user who takes the default refframe.')
-    d.figure('The atlas: positions transfer, depths need α ≈ 2.6', 'fig_p2_atlas.png', section=P2,
-             takeaway='Beer–Lambert, not pyodine’s linear scaling (which goes negative at α = 2.6).')
-    d.figure('Cross-correlation velocities: the planet is not there', 'fig_p2_phasefold.png', section=P2,
+        B('20 nights, 36 frames, 37 orders; wavecal RMS 0.11–0.15 px'),
+        B('Quality filter: 1329 order-spectra, 11.3% rejected'),
+        B('Template: three cell-out exposures, S/N ~790 per pixel'),
+        B('Atlas: Fischer 2022 FTS; positions match (r = 0.928), depths need α = 2.59'),
+        B('Adapter: observed frame, JD(UTC) mid-exposure, BVC in m/s'),
+    ], takeaway='Plus refframe_audit.py: two PypeIt core/wave.py bugs (next slide).')
+    d.bullets('PypeIt’s velocity correction (refframe_audit.py)', [
+        B('Solar-term sign error in geomotion_velocity (wave.py:128)'),
+        B('+9 to +14 m/s off astropy; drifts 5.2 m/s over nine months', level=1),
+        B('heliocentric is the default: every user is affected', level=1),
+        B('Relativistic terms omitted in geomotion_correct'),
+        B('−4.6 m/s, nearly constant', level=1),
+    ], takeaway='Both still in develop; reported upstream.')
+    d.figure('The atlas: positions transfer, depths need α ≈ 2.6', 'fig_p2_atlas.png',
+             takeaway='Beer–Lambert, not pyodine’s linear scaling (negative at α = 2.6).')
+    d.figure('Cross-correlation: the planet is not there', 'fig_p2_phasefold.png',
              takeaway='{:d} epochs, rms {:.0f} m/s; K = 408 ± 188 m/s — not a detection.'.format(
                  N['n_xc'], N['xc_rms']))
-    d.bullets('Why the lamp fails: the diagnosis phase 3 was built on', [
-        B('Orders within one exposure agree to 47 m/s; exposures disagree by ~700 m/s'),
-        B('→ the limit is the wavelength zero point, common to every order of an exposure'),
-        B('1998-07-19 (borrowed arc) sits +1.5 to +2.4 km/s off; 08-25 drifts 1.6 km/s in 6.7 h'),
-        B('Exactly what an iodine cell fixes: the ruler rides on the same photons, same optics, same instant'),
-    ], section=P2, takeaway='47 vs 702 m/s: the case for phase 3, measured rather than asserted.')
+    d.bullets('Why the lamp fails', [
+        B('Orders within one exposure agree to 47 m/s'),
+        B('Exposures disagree by ~700 m/s'),
+        B('So the limit is the wavelength zero point'),
+        B('Borrowed-arc night: +1.5 to +2.4 km/s off'),
+        B('08-25: drifts 1.6 km/s in 6.7 hours'),
+    ], takeaway='The iodine cell fixes exactly this: its ruler rides on the same photons.')
 
     # ---- Phase 3 ----------------------------------------------------------
     d.section('Phase 3', 'The iodine forward model',
-              'Fork pyodine, adapt it to HIRES, fit every cell-in epoch, and assess against the '
-              'published Keplerian exactly as phase 2 did.', color=BLUE)
-    d.table('The pyodine fork: six changes, each with a test that fails without it',
-            ['#', 'change', 'why'], [
-                ['0', 'NumPy 2: np.float, np.NaN', 'upstream does not run on a modern NumPy'],
-                ['1', 'Beer–Lambert iodine depth', 'linear scaling: 5.8% negative transmission at α = 2.6'],
-                ['2', 'atlases record their wavelength frame', 'air grid vs PypeIt vacuum = 83 km/s'],
-                ['3', 'bary_date / bary_vel_corr units', 'full JD(UTC) and m/s, not reduced BJD and km/s'],
-                ['4', "compute_weight('ivar')", 'weight by PypeIt’s propagated inverse variance'],
-                ['5', 'chunks record their template index', 'order subsets silently fitted the wrong template'],
-            ], section=P3, widths=[0.6, 4.6, 6.9],
-            takeaway='pyodine 4488b09 + changes 0–5; vendor/README.md; 59 tests pass.')
-    d.figure('Template deconvolution: pyodine’s spline breaks it at HIRES sampling', 'fig_p3_deconv.png',
-             section=P3, takeaway='misc.rebin overshoots 2.2-px lines by 6–18σ; oversampling 1 re-convolves at χ² 1.1.')
-    d.figure('One epoch end to end: right velocity, wrong iodine', 'fig_p5_one_epoch.png', section=P3,
-             takeaway='Epoch within 12–18 m/s of prediction; χ²ν ≈ 23 and the misfit tracks iodine contrast (ρ ≈ +0.7).')
-    d.figure('The instrumental profile is not the lever', 'fig_p6_lsf_models.png', section=P3,
-             takeaway='Four LSF models tie to ±5%; super-Gaussian chosen. The document had predicted the opposite.')
-    d.figure('B stars through the cell: the atlas’s line pattern is the limit', 'fig_p6b_bstars.png',
-             section=P3, takeaway='HIRES cell α ≈ 3.33; fixing per-chunk α buys nothing (−7 [−26, +7] m/s).')
-    d.figure('All 31 epochs: the misfit is common to every epoch, and cancels', 'fig_p7_epochs.png',
-             section=P3, takeaway='Chunk offsets (201 m/s spread) removed by pyodine’s combination: '
-                                  '290 → 230 m/s per chunk; ~19 m/s per epoch.')
-    d.figure('The detection', 'fig_ph3_phasefold.png', section=P3,
-             takeaway='K = {:.1f} ± {:.1f} m/s ({:.1f}σ), phase-2 method; residual {:.1f} m/s, '
-                      'χ²/dof 1.05.'.format(N['K'], N['sK'], N['nsig'], N['resid']))
-    d.figure('Epoch by epoch against the modern catalogue', 'fig_ph3_compare.png', section=P3,
-             takeaway='r = +0.89 (phase 2: +0.38); difference 25.5 m/s rms at χ²/dof 1.03 — the errors are honest.')
-    d.figure('What the residuals contain, and the blind period search', 'fig_ph3_residuals.png', section=P3,
-             takeaway='No ThAr zero-point, misfit or order-count dependence; residual periodogram flat (FAP 0.62).')
-    d.figure('Every named calibration defect is fixed', 'fig_p9_diagnosis.png', section=P3,
-             takeaway='Borrowed arcs, intra-night drift (−240 → +1 ± 3 m/s/h), no-pixel-flat night, 09-13’s bad arc.')
-    d.table('What is left: re-combining without the weakest data (prompt 9)',
-            ['variant', 'epochs', 'residual rms', 'K (m/s)'], [
-                ['prompt 7, everything (the result)', '31', '{:.1f} m/s'.format(N['var_base']),
-                 '{:.1f} ± {:.1f}'.format(N['K'], N['sK'])],
-                ['telluric-crossed chunks masked', '31', '24.2 m/s', '73.0 ± 6.7'],
-                ['without the 6 epochs with ≤ 8 orders', '25', '18.2 m/s', '70.8 ± 5.6'],
-                ['without the weak-iodine orders 58–61', '31', '17.2 m/s', '72.4 ± 4.7'],
-                ['both', '25', '{:.1f} m/s'.format(N['var_best']),
-                 '{:.1f} ± {:.1f}'.format(N['K_best'], N['sK_best'])],
-            ], section=P3, widths=[6.2, 1.4, 2.2, 2.3],
-            takeaway='K is stable (69.5–73.8) under every variant. The 11.5 m/s variant was chosen after '
-                     'seeing residuals: reported, not claimed.')
-    d.figure('Where we stand', 'fig8_precision.png', section=P3,
+              'Fork pyodine, adapt it to HIRES, fit every cell-in epoch, and assess '
+              'exactly as phase 2 did.', color=BLUE)
+    d.table('The pyodine fork: six tested changes', ['#', 'change', 'why'], [
+        ['0', 'NumPy 2', 'does not run as shipped'],
+        ['1', 'Beer–Lambert depth', 'linear goes negative'],
+        ['2', 'atlas wavelength frame', 'air vs vacuum: 83 km/s'],
+        ['3', 'bary units', 'JD(UTC) and m/s'],
+        ['4', "weight by 'ivar'", 'use PypeIt’s noise'],
+        ['5', 'chunk template index', 'order subsets misfit'],
+    ], widths=[0.8, 5.4, 6.13], row_h=0.6,
+        takeaway='pyodine 4488b09 + changes 0–5; each has a test that fails without it.')
+    d.figure('Deconvolution: pyodine’s spline fails at HIRES sampling', 'fig_p3_deconv.png',
+             takeaway='misc.rebin overshoots 2.2-px lines; oversampling 1 re-convolves at χ² 1.1.')
+    d.figure('One epoch: right velocity, wrong iodine', 'fig_p5_one_epoch.png',
+             takeaway='Within 12–18 m/s of prediction; the misfit tracks iodine contrast (ρ ≈ +0.7).')
+    d.figure('The instrumental profile is not the lever', 'fig_p6_lsf_models.png',
+             takeaway='Four LSF models tie to ±5%; super-Gaussian chosen.')
+    d.figure('B stars: the atlas’s line pattern is the limit', 'fig_p6b_bstars.png',
+             takeaway='HIRES cell α ≈ 3.33; fixing α per chunk buys nothing.')
+    d.figure('All 31 epochs: the misfit is common, and cancels', 'fig_p7_epochs.png',
+             takeaway='pyodine’s chunk offsets remove it: 290 → 230 m/s per chunk; ~19 m/s per epoch.')
+    d.figure('The detection', 'fig_ph3_phasefold.png',
+             takeaway='K = {:.1f} ± {:.1f} m/s ({:.1f}σ); residual {:.1f} m/s, χ²/dof 1.05.'.format(
+                 N['K'], N['sK'], N['nsig'], N['resid']))
+    d.figure('Epoch by epoch against the modern catalogue', 'fig_ph3_compare.png',
+             takeaway='r = +0.89 (phase 2: +0.38); the errors are honest (χ²/dof 1.03).')
+    d.figure('Residuals and the blind period search', 'fig_ph3_residuals.png',
+             takeaway='No ThAr, misfit or order-count dependence; residual periodogram flat.')
+    d.figure('Every named calibration defect is fixed', 'fig_p9_diagnosis.png',
+             takeaway='Borrowed arcs, intra-night drift, the no-flat night, 09-13’s bad arc.')
+    d.table('What is left: re-combining without the weakest data', ['variant', 'epochs', 'rms', 'K (m/s)'], [
+        ['everything (the result)', '31', '{:.1f}'.format(N['var_base']),
+         '{:.1f} ± {:.1f}'.format(N['K'], N['sK'])],
+        ['tellurics masked', '31', '24.2', '73.0 ± 6.7'],
+        ['no epochs with ≤ 8 orders', '25', '18.2', '70.8 ± 5.6'],
+        ['no red orders 58–61', '31', '17.2', '72.4 ± 4.7'],
+        ['both', '25', '{:.1f}'.format(N['var_best']),
+         '{:.1f} ± {:.1f}'.format(N['K_best'], N['sK_best'])],
+    ], widths=[5.9, 1.7, 1.7, 3.03], row_h=0.6,
+        takeaway='K is stable (69.5–73.8). The 11.5 m/s variant was chosen after seeing residuals: '
+                 'reported, not claimed.')
+    d.figure('Where we stand', 'fig8_precision.png',
              takeaway='Photon budget 1.4 m/s; achieved 26 m/s. The gap is modelling, not photons.')
 
     # ---- Wrap-up ----------------------------------------------------------
     d.bullets('Why 26 m/s and not 3', [
-        B('The atlas is a different cell: per-chunk misfit χ²ν ≈ 20; the fixed part cancels, the rest does not'),
-        B('Weak iodine in the red orders (58–61): errors coherent over whole orders; chunk weights cannot see it'),
-        B('Six epochs with 2–8 usable orders (extraction quality at the ends of nights)'),
-        B('A four-parameter super-Gaussian IP per chunk, against a decade-refined multi-Gaussian'),
-        B('Tellurics unmodelled (small: 25.8 → 24.2 m/s); a marginal seasonal term (+0.75 ± 0.45 m/s per km/s)'),
-    ], section='Summary', takeaway='Largest single gain available: the HIRES cell’s own FTS spectrum, if it exists.')
-    d.bullets('Upstream, and next', [
-        B('PypeIt (to Ryan Cooke; email + GitHub issues + PR): 15 items'),
-        B('keck_hires_orig bugs (fixed on branch); run_pypeit exit 0 with no output; -o appends', level=1),
-        B('core/wave.py sign error and missing relativistic terms (still in develop)', level=1),
-        B('ivar mis-scaled (2.35× OPT, 1.61× BOX); OPT_WAVE = 0 at masked pixels; biased boxcar at '
-          'partial apertures; orders dropped silently', level=1),
-        B('pyodine (GitHub issues): 6 fork changes + 15 worked-around items (index/order traps, inverted '
-          'Chauvenet, √χ² naming, jansson adjoint, spline, swallowed exceptions, …)'),
-        B('Next: a HIRES-cell spectrum (FTS scan or empirical from B stars); order-level weighting; '
-          'the PypeIt noise model'),
-    ], section='Summary')
+        B('The atlas is a different cell: part of its misfit does not cancel'),
+        B('Weak iodine in the red orders: errors shared by whole orders'),
+        B('Six epochs with only 2–8 usable orders'),
+        B('A simple instrumental profile (4-parameter super-Gaussian)'),
+        B('Tellurics unmodelled; a marginal seasonal term'),
+    ], takeaway='Largest single gain: the HIRES cell’s own FTS spectrum, if it exists.')
+    d.bullets('Upstream reports', [
+        B('PypeIt: 15 items (email to Ryan Cooke, issues, PR)'),
+        B('keck_hires_orig bugs; silent failures of run_pypeit', level=1),
+        B('wave.py sign error; ivar mis-scaled; zero wavelengths', level=1),
+        B('pyodine: 21 items (GitHub issues)'),
+        B('6 fork changes; index and order traps; swallowed errors', level=1),
+    ])
+    d.bullets('Next steps', [
+        B('A HIRES-cell iodine spectrum: FTS scan, or empirical from B stars'),
+        B('Weight whole orders, not just chunks, in the combination'),
+        B('Fix PypeIt’s noise model (optimal vs boxcar)'),
+        B('Diagnose 1998-09-13’s arc'),
+    ])
     d.bullets('Reproducibility', [
-        B('Every number from a script on disk; every table in first_hires_exoplanet/data/'),
-        B('PypeIt 2.0.2.dev1217+g017bece06 (orig-hires-fixes); pyodine 4488b09 + fork changes 0–5'),
-        B('Reduction: reduce_run.py; template: build_template.py, deconvolve_template.py'),
-        B('Velocities: fit_all_epochs.py; assessment: figs_phase3.py; diagnosis: diagnose_phase3.py'),
-        B('Reports and logs: claude_prompts/data_phase{1,2,3}_prompt.md; public write-up: '
-          'docs/public_HD187123b.md'),
+        B('Every number from a script; every table in first_hires_exoplanet/data/'),
+        B('PypeIt 2.0.2.dev1217+g017bece06; pyodine 4488b09 + fork'),
+        B('Velocities: fit_all_epochs.py; assessment: figs_phase3.py'),
+        B('Reports: claude_prompts/data_phase{1,2,3}_prompt.md'),
         B('This deck: make_slides.py'),
-    ], section='Summary')
+    ])
 
     d.save(out)
 
 
 def main():
-    p = argparse.ArgumentParser(description='Build the technical slide deck (phase 3, prompt 12)')
+    p = argparse.ArgumentParser(description='Build the technical slide deck (phase 3, prompts 12-13)')
     p.add_argument('--out', type=str, default=OUT)
     build(p.parse_args().out)
 
