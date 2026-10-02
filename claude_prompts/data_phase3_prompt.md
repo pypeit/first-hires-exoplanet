@@ -269,6 +269,15 @@ exact `pyodine` commit anything is derived from.
 
 14. Can you add a slide to the deck that shows the results from the original 1998 paper?  Include the figure from the original paper that shows the velocity curve.  Use Opus 5. Log your work.
 
+15.  Have you drafted the email for Ryan Cooke?  If so, please send it to me for review.  If not, please draft it now.  Use Opus 5. Log your work.
+
+16. Ok, do your best job at making 2 slides to 
+describe all that we have done for the general public.
+Empahize: (1) they could to most of this themselves, 
+eg. show the ~10 key prompts that I had to make;
+(2) emphasize that I could transfer my knowledge to a high school teacher who could lead a series of lessons for their students to do this and understand it.
+Use Opus 5. Log your work.
+
 ## Q&A
 
 ### After prompt 3: decisions before prompt 4
@@ -3941,5 +3950,113 @@ prompt, not prompt 12's 28. The prompt-13 session evidently did not log.
   (regenerated, unchanged in content); this document (Logs).
 - Outside the repository: `../first-hires-exoplanet-data/literature/`
   (the PDF and the two figure PNGs).
+
+**Whether any git command changed state.** No. None was run.
+
+### 2026-09-30 (Prompt 15: the Ryan Cooke draft already existed; emailed to the user for review, not to Ryan)
+
+**Task.** Say whether the email for Ryan Cooke had been drafted. If it had,
+send it to the user for review; if not, draft it. No new Q&A answers.
+
+**What was done.**
+- Confirmed that the draft exists: `docs/upstream/pypeit_report_draft.md`,
+  written in prompt 10 (1,625 words, 15 items in sections A–F). It was left
+  unchanged.
+- Stripped the Markdown (bold, backticks, `##` headings) for a plain-text
+  email, and sent it through the Gmail connector to the user only
+  (jxp@ucsc.edu). The subject is prefixed "[DRAFT for review]". Gmail
+  message id `1a0f4d40776d110c`.
+- Put a cover note at the top of the email. It says the email has not gone
+  to Ryan, and it raises the two points below.
+
+**Headline results.** Nothing went to Ryan. Two things are open before it
+does:
+- `<repository link>` is still a placeholder. The git remote is
+  `https://github.com/pypeit/first-hires-exoplanet`.
+- The closing paragraph asks Ryan how he wants issues and PRs. The Q&A
+  answer after prompt 10 was (c): the email, then the issues and the PR. The
+  close could say so.
+
+**What this taught us about the repository and the data.**
+- *The upstream drafts are the source; the email is a rendering of one.*
+  Edits belong in `docs/upstream/*.md`, so that the committed text matches
+  what is sent.
+- *Gmail's `send_message` wants plain text, not Markdown.* A `sed` pass that
+  strips bold, backticks and heading marks is enough. The draft's lists and
+  numbering read fine as plain text.
+- *The prompt-10 Q&A has moved past the draft's ending.* The answer chose
+  issues and a PR alongside the email, but the draft still asks Ryan which
+  he prefers.
+
+**Files added / modified.**
+- Modified: this document (Logs).
+- Outside the repository: one email sent, to the user only.
+
+**Whether any git command changed state.** No. `git remote -v` (read-only)
+was run.
+
+### 2026-10-01 (Prompt 16: two public slides — the ten prompts, and the project as six lessons)
+
+**Task.** Make two slides on the whole project for the general public. They
+should stress (1) that people could do most of it themselves, showing the
+~10 key prompts, and (2) that the knowledge could pass to a high-school
+teacher who leads students through it.
+
+**What was done.**
+- Read the prompt lists and Q&A sections of all five prompt docs, to find
+  which prompts the user actually wrote.
+- Wrote `first_hires_exoplanet/make_public_slides.py`, which builds
+  `docs/slides/public_summary.pptx` (2 slides, 16:9). It reuses `Deck` and
+  the 20-pt floor from `make_slides.py`.
+- The slide-1 counts are computed from the prompt docs at build time:
+  - **steps:** numbered items under each doc's `## Prompts`;
+  - **decisions:** `>A.` or `Answer:` lines in the Q&A sections;
+  - **days:** the first to the last dated log entry.
+- Rendered the slides through LibreOffice and revised once. Two tiles
+  wrapped and one lesson title ran to two lines. "Mostly (a) or (b)"
+  overstated it, so it became "often just (a)".
+
+**The slides.**
+- **Slide 1, "You could do most of this yourself."**
+  - Ten prompts, each shortened from the original. `PROMPTS` records where
+    each one is.
+  - The two workhorses are highlighted: "Reread the file and execute
+    prompt #N" and "Answer: (a)".
+  - Four tiles: 12 days, 49 steps, 26 decisions, and "all free" (public data
+    and software).
+  - Takeaway: the human set the goal and made the calls; the AI wrote the
+    plans, code and reports.
+- **Slide 2, "A teacher could lead a class through it."** Six lessons
+  follow the project's arc:
+  - the wobble; the archive; light into spectra;
+  - lamps fall short (phase 2's non-detection, used as a lesson);
+  - a ruler of iodine; find the planet.
+
+  Below them, what the teacher would be handed: the repository, the ten
+  prompts, the public write-up, and the judgment calls. Takeaway: the scarce
+  skill is knowing what to ask and when to doubt an answer.
+
+**Headline results.** The counts are 49 numbered steps across five prompt
+docs, 26 recorded decisions, and 12 days (2026-09-19 to 2026-09-30).
+
+**What this taught us about the repository and the data.**
+- *The user wrote few of the detailed prompts.*
+  - Each phase's numbered prompts were written by Claude, on request (for
+    example, context prompt 7: "generate a prompt doc").
+  - The user's own words were the goal, a handful of steering prompts, the
+    Q&A answers, and "execute prompt #N".
+  - That is the point slide 1 makes, so it is stated as such and not hidden.
+- *The prompt docs work as a dataset.* Their regular structure (`## Prompts`
+  as a numbered list, `>A.` / `Answer:` in Q&A, `### YYYY-MM-DD` logs) means
+  the project's own history can be counted by a script. Keep that format.
+- *Phases 1 and 2 recorded no Q&A answers.* All 26 decisions are in
+  `context_prompts.md` (14) and phase 3 (12). The phase-1 and phase-2
+  decisions were steering prompts, such as phase 1 #6, "Fix the issues you
+  have identified."
+
+**Files added / modified.**
+- Added: `first_hires_exoplanet/make_public_slides.py`;
+  `docs/slides/public_summary.pptx`.
+- Modified: this document (Logs).
 
 **Whether any git command changed state.** No. None was run.
