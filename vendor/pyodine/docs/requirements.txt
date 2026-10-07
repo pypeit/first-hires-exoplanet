@@ -1,0 +1,13 @@
+sphinx-book-theme
+myst-nb
+sphinx_autodoc_typehints
+astropy >= 4.2.1
+h5py >= 2.10.0
+numpy >= 1.20.1
+lmfit >= 1.0.2
+barycorrpy >= 0.4.4
+pathos >= 0.2.8
+argparse >= 1.1
+matplotlib >= 3.3.4
+progressbar2 >= 3.37.1
+dill >= 0.3.4

@@ -1,0 +1,9 @@
+variant,n,resid_rms,resid_robust,chi2_dof,K,sigma_K,nsig,med_err_pyodine
+prompt 7 (all),31,25.81,22.24,1.07,72.37,7.12,10.16,10.57
+without the 6 epochs of <= 8 orders,25,18.22,20.85,0.84,70.75,5.64,12.55,10.13
+without orders 58-61,31,17.15,15.40,0.60,72.44,4.72,15.36,10.02
+both,25,11.53,14.99,0.43,71.80,3.53,20.34,9.21
+"without the borrowed-arc, December and 09-13 epochs",25,24.62,28.52,1.07,69.45,7.96,8.72,10.67
+telluric-crossed chunks masked,31,24.20,21.06,0.94,72.96,6.67,10.94,10.59
+"tellurics masked, orders 58-59 dropped",31,19.38,16.72,0.74,73.79,5.31,13.90,10.30
+"tellurics masked, 58-59 and the <= 8-order epochs dropped",25,12.71,13.58,0.54,72.65,3.87,18.79,9.57

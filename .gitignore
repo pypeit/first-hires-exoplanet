@@ -232,3 +232,25 @@ QA/
 
 # ...but the package ships a small data file (see Q10 in claude_prompts/context_prompts.md)
 !first_hires_exoplanet/data/
+
+# Vendored pyodine: `lib/` above (a Python build directory) would otherwise
+# swallow pyodine/lib/, which is source, not build output.
+!vendor/pyodine/pyodine/lib/
+
+# Vendored pyodine: the thirteen bulk binaries upstream tracks (303 MB) live
+# in ../first-hires-exoplanet-data/pyodine_assets/ and are symlinked back into
+# place by first_hires_exoplanet/vendor_pyodine.py.  The symlinks are not
+# committed; vendor/pyodine_assets.csv records what they point at.
+vendor/pyodine/iodine_atlas/Fischer_Cell_May2022_downsampled3.h5
+vendor/pyodine/iodine_atlas/song_iodine_cell_01_65C.h5
+vendor/pyodine/pyodine/reference/arcturus/ardata.fits
+vendor/pyodine/pyodine/tellurics/CARMENES/car-20171005T18h40m43s-sci-gtoc-vis_A.fits
+vendor/pyodine/pyodine/tellurics/CARMENES/car-20180131T04h59m08s-sci-gtoc-vis_A.fits
+vendor/pyodine/pyodine/tellurics/CARMENES/stdatmos_vis50a080rh0780p000t.fits
+vendor/pyodine/pyodine/tellurics/CARMENES/tdtm.pdf
+vendor/pyodine/pyodine/tellurics/CARMENES/telluric_mask_atlas_carm.dat
+vendor/pyodine/pyodine/tellurics/CARMENES/telluric_mask_carm_short_newlines.dat
+vendor/pyodine/pyodine/tellurics/HITRAN/5f27a179.par
+vendor/pyodine/pyodine/tellurics/HITRAN/HITRAN_mask.dat
+vendor/pyodine/tutorial_data/sigdra_obs.tar.gz
+vendor/pyodine/tutorial_data/sigdra_template.tar.gz

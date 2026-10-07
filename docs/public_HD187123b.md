@@ -246,11 +246,160 @@ iodine cell's real legacy.
 
 This repository is an attempt to go back to the beginning. The original 1998
 spectra are archived, and [PypeIt](https://pypeit.readthedocs.io/) is a modern,
-open-source reduction pipeline. We want to re-reduce those frames from scratch
-and see how close we come to the result that Butler, Marcy, Vogt and Apps
-extracted from them a quarter of a century ago. We have not done it yet — the
-1998 data predates a major detector upgrade, and precision velocities need
-machinery beyond what PypeIt currently provides. This document is where we start.
+open-source reduction pipeline. We re-reduced those frames from scratch to see
+how close we could come to the result that Butler, Marcy, Vogt and Apps
+extracted from them a quarter of a century ago. The rest of this document is
+what we found.
+
+---
+
+## Going back to the 1998 spectra
+
+Every exposure Keck has ever taken is kept in the
+[Keck Observatory Archive](https://koa.ipac.caltech.edu/). For HD 187123 in the
+discovery era that is 36 exposures of the star, spread over 20 nights between
+December 1997 and September 1998. There are also the lamp and flat-field
+calibration frames taken on those nights. We did the work in three stages,
+each built on the one before.
+
+**Stage one: turning pictures into spectra.** An echelle spectrograph spreads
+starlight into 37 short strips, stacked on the detector like the lines of a
+page. Getting from the raw image to a spectrum means finding each strip,
+correcting the detector's quirks and assigning a wavelength to every pixel.
+PypeIt had never been run on HIRES data this old; the detector was replaced in
+2004. Three bugs had to be fixed before the spectra came out right:
+- the image was read 21 columns out of place;
+- the map of bad detector columns landed 20 pixels from the real defects;
+- the pixel binning was read backwards.
+
+After that, all 20 nights reduced without any hand-tuning. The fixes are
+public, and a report is going back to the PypeIt developers.
+
+**Stage two: using a lamp as the ruler.** The obvious first attempt at
+velocities uses the wavelength scale from the thorium–argon lamp exposures
+taken each night. This is exactly the approach the iodine cell was invented
+to replace, and the result shows why. Between exposures the velocities
+scattered by **about 700 m/s**, ten times the planet's signal (Figure 7,
+left). Fitting the known orbit to them gives an amplitude of 408 ± 188 m/s.
+That is not a detection, and nothing in it would have looked different if the
+planet did not exist.
+
+The failure was informative, though. Within a single exposure, the different
+strips of the spectrum agreed with each other to about 50 m/s. It was the
+whole spectrum that moved, by up to 2 km/s, from one exposure to the next:
+- **Drift through the night.** On one night the lamp-based wavelengths drifted
+  by 1.6 km/s over seven hours, as the instrument flexed.
+- **A borrowed lamp.** One night took no lamp exposures at all, so it borrowed
+  the previous night's, and sat 2 km/s out.
+
+This is the problem described in "The iodine cell" above, measured on real
+data: a lamp calibrates something *adjacent* to the measurement, not the
+measurement itself.
+
+**Stage three: the iodine cell.** So we did what Butler and colleagues did,
+and modelled every exposure. The model combines:
+- a template spectrum of the star, taken without the cell;
+- a laboratory spectrum of iodine;
+- a trial velocity, a trial wavelength scale and a trial instrumental blur.
+
+Each exposure was split into 700 short stretches, each fitted separately. We
+used [`pyodine`](https://github.com/pepeheeren/pyodine), an open
+implementation of the method by Heeren and colleagues (2023), adapting it to HIRES
+and fixing what we found along the way. Two things we did not have:
+- **the laboratory spectrum of the Keck cell itself.** We used one scanned
+  from a different iodine cell in 2022;
+- **the decades of refinement** that went into the pipeline built for this
+  instrument.
+
+![The same 31 exposures of HD 187123 folded on the orbital period, measured
+three ways: with a lamp for the wavelength scale, with the iodine cell and
+open software, and with the iodine cell and the modern professional
+pipeline.](figs/fig7_three_ways.png)
+
+*Figure 7. The same photons, measured three ways, folded on the 3.097-day
+period. The grey curve is the orbit from the modern catalogue.*
+- *Left: velocities from a lamp-based wavelength scale (stage two). Note the
+  vertical scale, which is sixteen times larger than the other two panels;
+  the shaded band is their entire range. The planet is lost.*
+- *Middle: our iodine-cell measurements (stage three). The planet is plainly
+  there.*
+- *Right: the modern re-reduction of the same observations by the team that
+  maintains the Keck velocity catalogue (Teklu et al. 2025), with error bars
+  smaller than the points.*
+
+**The planet came back.** Fitting a circular orbit at the known period to our
+iodine velocities gives an amplitude of **72 ± 7 m/s**. Butler and colleagues
+published 72 m/s in 1998, and the modern catalogue gives 69 m/s. That is a
+detection at ten times its own uncertainty. It does not depend on knowing the
+answer in advance:
+- **The period, found blind.** Asked only "is there any repeating signal
+  between half a day and a month?", the data single out **3.095 days**. The
+  chance of a peak that strong arising from noise is about one in 40 billion.
+- **The timing.** The planet's timing in its orbit agrees with the modern
+  catalogue to within a few degrees.
+
+**The iodine also repaired the lamp's failures.**
+- **The borrowed-lamp night** sits on the orbit with the others.
+- **The drift through the night** is gone: the seven-hour, 1.6 km/s drift
+  disappears into the noise.
+
+The iodine cell did the job it was built for. It carried its own ruler through
+the instrument with the starlight, and the ruler made the lamp's problems
+irrelevant.
+
+## Where we fell short, and why
+
+The honest comparison is Figure 8. Each of our iodine measurements scatters
+by **26 m/s** about the orbit.
+- That is well inside the 72 m/s signal, which is why the planet is detected.
+- It is 28 times better than the lamp-based attempt.
+- It is roughly **ten times worse** than the 3 m/s the method was designed to
+  reach.
+- It is roughly ten times worse than the **2.2 m/s** the modern pipeline gets
+  from these same exposures.
+
+![Horizontal bars comparing how much a single velocity measurement scatters
+about the orbit for three approaches, against the 72 m/s signal of the
+planet.](figs/fig8_precision.png)
+
+*Figure 8. How much one velocity measurement scatters about the orbit, on a
+logarithmic scale, for the three approaches in Figure 7. The dashed line is
+the planet's signal. A method detects the planet when its bar ends well to the
+left of the line.*
+
+The shortfall is not the light itself. The number of photons in each exposure
+would support about 1.5 m/s. What limits us is the modelling:
+- **The wrong iodine cell.** Every iodine cell is slightly different, and the
+  laboratory spectrum we used is of a different cell from the one in HIRES.
+  Its lines are in the right places but not exactly the right shapes and
+  depths, so the model never fits the data perfectly. Much of that mismatch is
+  the same in every exposure and cancels when exposures are compared. The
+  rest does not. A laboratory scan of the actual Keck cell, if one survives,
+  would be the single biggest improvement.
+- **A simpler model of the instrument.** Our description of how HIRES blurs a
+  sharp line is deliberately simple. The Keck team refined theirs over many
+  years.
+- **The red end of the band.** At the long-wavelength end of the iodine
+  region the iodine lines are weak. Those parts of the spectrum carry little
+  information, and they add noise.
+- **A few poor exposures.** In several frames, taken at the end of a night,
+  only a small part of the spectrum was usable.
+
+Leaving out the red end and the poorest exposures brings the scatter down to
+about 12 m/s. But we decided to try that *after* seeing the results, which is
+exactly the kind of choice that can flatter a measurement. We report 26 m/s as
+our result.
+
+So we did not reproduce what Butler, Marcy, Vogt and Apps achieved in 1998.
+What we did show is that the discovery can be made again, independently, from
+the archived photons, with open software and without any of the original
+team's code. And the reason it works is the one that matters: a small glass
+cell of iodine, put in the beam a quarter of a century ago.
+
+Along the way we found problems in both of the open codes we relied on. They
+go back to their authors: fifteen items for PypeIt and twenty-one for `pyodine`.
+The full technical record, with every number in this section and the scripts
+that produce them, is in this repository.
 
 ---
 
@@ -268,6 +417,8 @@ machinery beyond what PypeIt currently provides. This document is where we start
 - Wright, J. T., Marcy, G. W., Fischer, D. A., et al. 2007, *Four New Exoplanets
   and Hints of Additional Substellar Companions to Exoplanet Host Stars*, ApJ,
   657, 533. [doi:10.1086/510553](https://doi.org/10.1086/510553)
+- Heeren, P., Tronsgaard, R., Grundahl, F., et al. 2023, A&A, 674, A164.
+  [arXiv:2306.13615](https://arxiv.org/abs/2306.13615)
 - Teklu, J. T., Perdelwitz, V., Butler, R. P., et al. 2025, *An updated catalog
   of HIRES/Keck radial velocity measurements*, A&A, 702, A68.
   [doi:10.1051/0004-6361/202555034](https://doi.org/10.1051/0004-6361/202555034)
@@ -276,5 +427,10 @@ Figures 4 and 5 use velocities from the Teklu et al. (2025) catalogue
 ([VizieR J/A+A/702/A68](https://vizier.cds.unistra.fr/viz-bin/VizieR?-source=J/A%2BA/702/A68)),
 retrieved 19 September 2026. These are modern, systematics-corrected
 re-reductions of the original Keck/HIRES observations, not the velocity values
-printed in the 1998 paper. All figures are generated by
+printed in the 1998 paper. Figures 7 and 8 add this project's own velocities
+from the same exposures:
+[`data/xcorr_velocities.csv`](../first_hires_exoplanet/data/xcorr_velocities.csv)
+(lamp-calibrated) and
+[`data/iodine_velocities.csv`](../first_hires_exoplanet/data/iodine_velocities.csv)
+(iodine cell). All figures are generated by
 [`first_hires_exoplanet/figs.py`](../first_hires_exoplanet/figs.py).

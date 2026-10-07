@@ -1,0 +1,14 @@
+version: 2
+
+python:
+  version: 3.8
+  install:
+   - requirements: docs/requirements.txt
+   - method: pip
+     path: .
+  system_packages: true
+
+sphinx:
+  configuration: docs/source/conf.py
+  fail_on_warning: true
+  builder: dirhtml

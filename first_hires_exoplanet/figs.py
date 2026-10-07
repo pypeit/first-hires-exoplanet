@@ -457,6 +457,117 @@ def fig_phasefold():
 
 
 # ---------------------------------------------------------------------------
+# Figures 7 and 8 -- what the three phases of this project measured
+# ---------------------------------------------------------------------------
+
+#: This project's own velocities, from the same discovery-era frames:
+#: phase 2's cross-correlation (ThAr wavelengths) and phase 3's iodine
+#: forward model.  Both relative, m/s.
+XCORR_FILE = os.path.join(_HERE, 'data', 'xcorr_velocities.csv')
+IODINE_FILE = os.path.join(_HERE, 'data', 'iodine_velocities.csv')
+
+
+def load_ours():
+    """ Phase 2 and phase 3 velocities: dicts of jd, v, e (m/s).
+
+    Phase 2's cross-correlation velocities are the cell-in epochs only, so
+    that both sets cover the same observations.
+    """
+    from astropy.table import Table
+    io = Table.read(IODINE_FILE)
+    xc = Table.read(XCORR_FILE)
+    keep = np.isin(xc['koaid'], io['koaid'])
+    xc = xc[keep]
+    # The same frames, so the same mid-exposure JD(UTC) as phase 3's table
+    jd_of = {k: float(t) for k, t in zip(io['koaid'], io['jd'])}
+    jd_x = np.array([jd_of[k] for k in xc['koaid']])
+    p2 = dict(jd=jd_x, v=np.asarray(xc['v_rel'], float), e=np.asarray(xc['sigma_empirical'], float))
+    p3 = dict(jd=np.asarray(io['jd'], float), v=np.asarray(io['v_bary'], float),
+              e=np.asarray(io['sig_epoch'], float))
+    return p2, p3
+
+
+def _fold_on(bjd_or_jd, v, e, semi, phase0, gamma):
+    """ Phase, and velocities with their own offset removed against the orbit. """
+    phase = np.mod(bjd_or_jd / PERIOD - phase0, 1.)
+    model = gamma + semi * np.cos(2 * np.pi * phase)
+    w = 1. / e ** 2
+    off = np.sum(w * (v - model)) / np.sum(w)
+    return phase, v - off
+
+
+def fig_three_ways():
+    """ The same frames folded on the orbit: lamp-calibrated, iodine, modern. """
+    bjd, rv, erv = load_velocities(discovery_era=True)
+    semi, phase0, gamma = fit_circular(bjd, rv, erv)
+    p2, p3 = load_ours()
+    pp = np.linspace(-0.25, 1.25, 600)
+    curve = gamma + semi * np.cos(2 * np.pi * pp)
+
+    fig, axes = plt.subplots(1, 3, figsize=(13., 4.4), width_ratios=[1., 1., 1.])
+    panels = [
+        (axes[0], p2, C_THIRD, 'Lamp-calibrated\n(this project, phase 2)', 2600.),
+        (axes[1], p3, C_DATA, 'Iodine cell, open software\n(this project, phase 3)', 160.),
+        (axes[2], dict(jd=bjd, v=rv, e=erv), C_MODEL, 'Iodine cell, modern pipeline\n(Teklu et al. 2025)', 160.),
+    ]
+    for ax, d, col, title, lim in panels:
+        phase, vv = _fold_on(d['jd'], d['v'], d['e'], semi, phase0, gamma)
+        ax.plot(pp, curve - gamma, color='#8a8a86', lw=1.6, zorder=2)
+        for offset in (-1., 0., 1.):
+            ax.errorbar(phase + offset, vv - gamma, yerr=d['e'], fmt='o', color=col, ms=6,
+                        lw=1.1, capsize=0, zorder=5, mec=SURFACE, mew=1.0,
+                        alpha=1. if offset == 0 else 0.35)
+        ax.set_xlim(-0.25, 1.25)
+        ax.set_ylim(-lim, lim)
+        ax.axhline(0., color='#c9c8c3', lw=0.8)
+        ax.set_title(title, fontsize=11)
+        ax.set_xlabel('Orbital phase')
+        ax.grid(alpha=0.6)
+    # The other two panels' whole range, marked on the first
+    axes[0].axhspan(-160., 160., color=C_DATA, alpha=0.10, lw=0, zorder=1)
+    axes[0].text(0.5, 330., 'range of the other two panels', ha='center', color=C_DATA, fontsize=9)
+    axes[0].set_ylabel('Velocity (m s$^{-1}$)')
+    fig.tight_layout()
+    _save(fig, 'fig7_three_ways.png')
+
+
+def fig_precision_ladder():
+    """ How precisely each approach measures one epoch, against the planet. """
+    bjd, rv, erv = load_velocities(discovery_era=True)
+    semi, phase0, gamma = fit_circular(bjd, rv, erv)
+    p2, p3 = load_ours()
+
+    def resid_rms(d):
+        phase, vv = _fold_on(d['jd'], d['v'], d['e'], semi, phase0, gamma)
+        return float(np.std(vv - (gamma + semi * np.cos(2 * np.pi * phase)), ddof=1))
+
+    cat = dict(jd=bjd, v=rv, e=erv)
+    vals = [resid_rms(p2), resid_rms(p3), resid_rms(cat)]
+    labels = ['Lamp-calibrated\n(phase 2)', 'Iodine cell, open software\n(phase 3)',
+              'Iodine cell, modern pipeline\n(Teklu et al. 2025)']
+    cols = [C_THIRD, C_DATA, C_MODEL]
+
+    fig, ax = plt.subplots(figsize=(9., 3.6))
+    y = np.arange(len(vals))[::-1]
+    ax.barh(y, vals, height=0.55, color=cols, zorder=3)
+    ax.axvline(K_PUBLISHED, color=INK, lw=1.6, ls='--', zorder=4)
+    ax.text(K_PUBLISHED * 1.08, y[0] + 0.52, 'the planet: 72 m s$^{-1}$', color=INK, fontsize=10,
+            va='center')
+    for yi, v in zip(y, vals):
+        ax.text(v * 1.12, yi, '{:.0f} m s$^{{-1}}$'.format(v) if v >= 10 else
+                '{:.1f} m s$^{{-1}}$'.format(v), va='center', color=INK, fontsize=10)
+    ax.set_xscale('log')
+    ax.set_xlim(1., 3000.)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    ax.set_xlabel('Scatter of one measurement about the orbit (m s$^{-1}$, log scale)')
+    ax.grid(axis='x', alpha=0.6)
+    fig.tight_layout()
+    _save(fig, 'fig8_precision.png')
+    return vals
+
+
+# ---------------------------------------------------------------------------
 # Figure 6 -- how close is 0.042 AU?
 # ---------------------------------------------------------------------------
 
@@ -503,6 +614,8 @@ def main():
     fig_july1998()
     semi, nobs = fig_phasefold()
     fig_orbit_scale()
+    fig_three_ways()
+    ladder = fig_precision_ladder()
 
     bjd, rv, erv = load_velocities(discovery_era=True)
     tt = Time(bjd, format='jd')
@@ -514,6 +627,7 @@ def main():
     print('fitted K             : {:.1f} m/s  (published 72)'.format(semi))
     print('median error         : {:.2f} m/s'.format(np.median(erv)))
     print('all epochs in file   : {:d}'.format(len(load_velocities()[0])))
+    print('scatter about orbit  : phase 2 {:.0f}, phase 3 {:.1f}, catalogue {:.1f} m/s'.format(*ladder))
 
 
 if __name__ == '__main__':

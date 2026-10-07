@@ -1,0 +1,5 @@
+astropy >= 1.1
+h5py >= 2.5.0
+lmfit >= 0.9.2
+numpy >= 1.10.4
+scipy >= 0.17.0

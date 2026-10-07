@@ -1,0 +1,140 @@
+ Visible and Near Infrared Atlas of the Arcturus Spectrum, 3727-9300 A
+
+    Kenneth Hinkle, Lloyd Wallace, Jeff Valenti, and Dianne Harmer
+
+
+
+                   DESCRIPTION OF THE CD-ROM
+
+
+
+This CD-ROM contains the spectra displayed on the atlas pages formatted
+in ASCII and FITS.  In addition, the line lists printed in the
+Appendices are included.  The data is divided into 64 files.  Since
+the number of files is quite small all the files are in the main
+directory.  The following readme file is a copy of the "Description of
+the CD-ROM" printed on pages 375-377 of the atlas.
+
+
+
+                     Data in ASCII format
+
+The ASCII data is broken up into files covering 100 Angstroms with each
+file labeled arnnnn, where nnnn is the approximate starting wavelength
+for the file.  In each file the first column contains the wavelength,
+the second is the Arcturus spectrum, the third is the solar flux
+spectrum, and the fourth is the telluric transmission spectrum used to
+correct the solar flux spectrum.  Both Arcturus and the solar flux
+spectrum have been corrected for telluric absorption and in regions
+where the correction was poor "-1." has been substituted.  In addition,
+regions of the Arcturus spectrum suspected to be affected by detector
+blemishes have been flagged by a minus sign in front of the spectral
+value.
+
+
+
+                     Data in FITS format
+
+Two fits formats are provided.  The best wavelength accuracy is
+provided by the data in FITS binary table extension format.  This data
+is contained on the file ardata.fits.  However, for many IRAF users
+multispec format is much more readable.  The multispec data is found in
+files arcturus.fits, solarflux.fits, and telluric.fits.
+
+
+
+                    FITS Multispec Format
+
+On the CD-ROM the files arcturus.fits, solarflux.fits, and
+telluric.fits contain data from columns two through four of the ASCII
+files ar3700 through ar9200.  These FITS files are in IRAF
+"multispec" format, with a sixth order polynomial fit to the
+wavelength scale encoded in the FITS header. The maximum error in this
+polynomial representation of the original wavelength scale is 0.24 mA.
+
+To plot these FITS multispec data in IRAF, use SPLOT in the ONEDSPEC
+package. For example, the spectral segments shown in Figure 4 can be
+plotted as follows:
+
+  cl> noao
+  no> onedspec
+  on> splot arcturus.fits xmin=3930 xmax=3938
+  on> splot solarflux.fits xmin=3930 xmax=3938
+
+
+
+               FITS Binary Table Extension Format
+
+On the CD-ROM the file ardata.fits contains all data from the ASCII
+files ar3700 through ar9200, merged into a single FITS file. This FITS
+file consists of a null primary data unit (NAXIS=0) with a trivial
+primary data header that serves only to flag the existence of an
+extension (EXTEND=T). The first and only FITS extension is a binary
+table with four columns, named WAVELENGTH, ARCTURUS, SOLARFLUX, and
+TELLURIC, corresponding to the four columns in the ASCII files ar3700
+through ar9200.
+
+
+To read the FITS binary table data into IDL, use the astronomy library
+function MRDFITS(). For example, the spectral segments shown in Figure
+4 can be plotted as follows:
+
+  IDL> atlas = mrdfits('ardata.fits', 1)
+  IDL> help, atlas
+  ATLAS           STRUCT    = -> <Anonymous> Array[762078]
+  IDL> help, atlas, /str
+  ** Structure <91e30>, 4 tags, length=24, refs=1:
+     WAVELENGTH      DOUBLE           3726.7000
+     ARCTURUS        FLOAT          0.440800
+     SOLARFLUX       FLOAT          0.726200
+     TELLURIC        FLOAT           1.00000
+  IDL> iwhr = where(abs(atlas.wavelength-3934) le 4)
+  IDL> plot, atlas(iwhr).wavelength, atlas(iwhr).arcturus
+  IDL> plot, atlas(iwhr).wavelength, atlas(iwhr).solarflux
+
+To read and plot the binary table data with IRAF, use the TABLES
+package. For example, the spectral segments shown in Figure 4 can be
+plotted as follows:
+
+  cl> tables
+  ta> ttools
+  tt> tinfo ardata.fits
+  # ardata.fits[1]
+  762078 rows written to table
+     4 columns defined
+    29 header parameters written to table
+    35 records allocated for header parameters
+     4 space allocated for column descriptors
+  table type:  fits
+  tt> tlcol ardata.fits[1]
+  # ardata.fits[1]
+  WAVELENGTH       D           %9.4f ""              
+  ARCTURUS         R           %7.4f ""              
+  SOLARFLUX        R           %7.4f ""              
+  TELLURIC         R           %7.4f ""              
+  tt> sgraph "ardata.fits[r:wavelength=3930:3938] wavelength arcturus"
+  tt> sgraph "ardata.fits[r:wavelength=3930:3938] wavelength solarflux"
+
+
+
+
+
+                             Line Lists
+
+
+The primary line lists used in labeling the spectra were organized with
+blended constituents listed separately to form the appendices to the
+atlas.  These appendices appear on the CD-ROM as the ASCII files appi,
+appii, and  appiii.   appi is the atomic line list,  appii the CN line
+list, and  appiii the CH and MgH line list.
+
+
+
+
+                           Volume I Data
+
+
+The data for Volume I (Infrared Atlas of the Arcturus Spectrum, 0.9-5.3
+microns) is available on the AAS CD-ROM series.  The data can be found
+on CD-ROM Number 5 at volume5/pasp/v107/p1402.
+

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "error_file": {
+      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    },
+    "info_file": {
+      "format": "%(levelname)s - %(message)s"
+    },
+    "console": {
+      "format": "%(message)s"
+    }
+    
+  },
+
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "level": "INFO",
+      "formatter": "console",
+      "stream": "ext://sys.stdout"
+    },
+
+    "info_file_handler": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "level": "INFO",
+      "formatter": "info_file",
+      "filename": "/home/paul/info.log",
+      "maxBytes": 10485760,
+      "backupCount": 20,
+      "encoding": "utf8"
+    },
+
+    "error_file_handler": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "level": "ERROR",
+      "formatter": "error_file",
+      "filename": "/home/paul/errors.log",
+      "maxBytes": 10485760,
+      "backupCount": 20,
+      "encoding": "utf8"
+    }
+  },
+
+  "loggers": {
+    "test": {
+      "level": "ERROR",
+      "handlers": ["console"],
+      "propagate": false
+    }
+  },
+
+  "root": {
+    "level": "INFO",
+    "handlers": ["console", "info_file_handler", "error_file_handler"]
+  }
+}
