@@ -278,6 +278,9 @@ eg. show the ~10 key prompts that I had to make;
 (2) emphasize that I could transfer my knowledge to a high school teacher who could lead a series of lessons for their students to do this and understand it.
 Use Opus 5. Log your work.
 
+17. I have pulled this branch into the main branch.  Please generate a QR code that points at the public facing report: `https://github.com/pypeit/first-hires-exoplanet/blob/main/docs/public_HD187123b.md` that I will put on a slide.
+Use Opus 5. Log your work.
+
 ## Q&A
 
 ### After prompt 3: decisions before prompt 4
@@ -4060,3 +4063,48 @@ docs, 26 recorded decisions, and 12 days (2026-09-19 to 2026-09-30).
 - Modified: this document (Logs).
 
 **Whether any git command changed state.** No. None was run.
+
+### 2026-10-06 (Prompt 17: QR code for the public report, written by a script and verified by decoding)
+
+**Task.** Generate a QR code for a slide, pointing at
+`https://github.com/pypeit/first-hires-exoplanet/blob/main/docs/public_HD187123b.md`.
+The branch is now merged into `main`.
+
+**What was done.**
+- Checked that the URL resolves: HTTP 200.
+- Installed `segno` 1.6.6 into `pypeit14` with pip. It is pure Python with
+  no dependencies. Neither `segno` nor `qrcode` was installed before.
+- Wrote `first_hires_exoplanet/make_qr.py`. It writes
+  `docs/figs/qr_public_report.png` (1197 px square) and
+  `docs/figs/qr_public_report.svg`. Both are black on white, at
+  error-correction level H, with the standard 4-module quiet zone.
+- Verified both images by decoding them with OpenCV's `QRCodeDetector`.
+  OpenCV was installed into a scratchpad `--target` directory, not into
+  `pypeit14`.
+
+**Headline results.**
+- The code is QR version 8, 57 modules across with the border.
+- It decodes to the exact URL at full size, and still decodes when shrunk
+  to 150 px.
+
+**What this taught us about the repository and the data.**
+- *Level H costs little here.* The URL is 84 characters. At level H it
+  needs version 8, which is still coarse enough to scan from across a room.
+  It also tolerates a logo or a partial occlusion, at 30% loss.
+- *Keep the white border on the slide.* Without the quiet zone against a
+  dark background, many phone cameras fail to read the code.
+- *A QR code is only as durable as its URL.* This one points at `main`. If
+  `docs/public_HD187123b.md` is renamed, or the repository moves, printed
+  codes break. A short redirect, or a GitHub Pages URL, would decouple them.
+  `make_qr.py --url` regenerates the code for a new address.
+- *Verify a code by decoding it, not by looking at it.* No decoder was on
+  the machine (no `zbarimg`, no `cv2`). A throwaway OpenCV install in the
+  scratchpad did the check without touching the environment.
+
+**Files added / modified.**
+- Added: `first_hires_exoplanet/make_qr.py`;
+  `docs/figs/qr_public_report.png`; `docs/figs/qr_public_report.svg`.
+- Modified: this document (Logs). `pypeit14` gained `segno`.
+
+**Whether any git command changed state.** No. `git status` and `git log`
+(read-only) were run.
